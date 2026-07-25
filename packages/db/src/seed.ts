@@ -22,11 +22,15 @@ const PENDING_ADMIN_ID = "80000000-0000-4000-8000-000000000001";
 
 const ids = {
   document: "30000000-0000-4000-8000-000000000001",
+  draftDocument: "30000000-0000-4000-8000-000000000002",
   plan: "40000000-0000-4000-8000-000000000001",
+  draftPlan: "40000000-0000-4000-8000-000000000002",
   medication: "50000000-0000-4000-8000-000000000001",
   test: "50000000-0000-4000-8000-000000000002",
   referral: "50000000-0000-4000-8000-000000000003",
   followUp: "50000000-0000-4000-8000-000000000004",
+  draftMedication: "50000000-0000-4000-8000-000000000005",
+  draftTest: "50000000-0000-4000-8000-000000000006",
   report: "60000000-0000-4000-8000-000000000001",
   events: [
     "70000000-0000-4000-8000-000000000001",
@@ -147,13 +151,22 @@ async function seed() {
 
   await db
     .insert(sourceDocuments)
-    .values({
-      id: ids.document,
-      patientId: DEMO_PATIENT_ID,
-      documentType: "discharge_summary",
-      content:
-        "Take Amlodipine 5 mg once daily after breakfast. Complete a CBC blood test tomorrow. Attend a cardiology consultation within three days. Return to the PHC for follow-up in seven days.",
-    })
+    .values([
+      {
+        id: ids.document,
+        patientId: DEMO_PATIENT_ID,
+        documentType: "discharge_summary",
+        content:
+          "Take Amlodipine 5 mg once daily after breakfast. Complete a CBC blood test tomorrow. Attend a cardiology consultation within three days. Return to the PHC for follow-up in seven days.",
+      },
+      {
+        id: ids.draftDocument,
+        patientId: DEMO_PATIENT_ID,
+        documentType: "discharge_summary",
+        content:
+          "Start Metformin 500 mg twice daily with meals. Schedule an HbA1c test in fourteen days. Book a dietitian consultation next month. Return to the PHC in thirty days for review.",
+      },
+    ])
     .onConflictDoUpdate({
       target: sourceDocuments.id,
       set: { uploadedAt: now },
@@ -161,16 +174,26 @@ async function seed() {
 
   await db
     .insert(carePlans)
-    .values({
-      id: ids.plan,
-      patientId: DEMO_PATIENT_ID,
-      providerId: DEMO_PROVIDER_ID,
-      status: "active",
-      verifiedAt: now,
-    })
+    .values([
+      {
+        id: ids.plan,
+        patientId: DEMO_PATIENT_ID,
+        providerId: DEMO_PROVIDER_ID,
+        sourceDocumentId: ids.document,
+        status: "active",
+        verifiedAt: now,
+      },
+      {
+        id: ids.draftPlan,
+        patientId: DEMO_PATIENT_ID,
+        providerId: DEMO_PROVIDER_ID,
+        sourceDocumentId: ids.draftDocument,
+        status: "draft",
+      },
+    ])
     .onConflictDoUpdate({
       target: carePlans.id,
-      set: { status: "active", verifiedAt: now },
+      set: { status: "active", verifiedAt: now, sourceDocumentId: ids.document },
     });
 
   await db
@@ -235,11 +258,42 @@ async function seed() {
     ])
     .onConflictDoUpdate({
       target: careActions.id,
-      set: {
-        verified: true,
-        createdAt: now,
-      },
+      set: { createdAt: now },
     });
+
+  await db
+    .insert(careActions)
+    .values([
+      {
+        id: ids.draftMedication,
+        carePlanId: ids.draftPlan,
+        type: "MEDICATION",
+        title: "Start Metformin",
+        instructions: "Take 500 mg twice daily with meals.",
+        dueDate: daysFromNow(0),
+        status: "PENDING",
+        priority: "NORMAL",
+        sourceText: "Start Metformin 500 mg twice daily with meals.",
+        reviewRequired: false,
+        verified: false,
+        payload: { schedule: "Twice daily with meals", durationDays: 30 },
+      },
+      {
+        id: ids.draftTest,
+        carePlanId: ids.draftPlan,
+        type: "TEST",
+        title: "Schedule HbA1c test",
+        instructions: "Visit the PHC lab in fourteen days and upload the report.",
+        dueDate: daysFromNow(14),
+        status: "PENDING",
+        priority: "NORMAL",
+        sourceText: "Schedule an HbA1c test in fourteen days.",
+        reviewRequired: true,
+        verified: false,
+        payload: { testName: "HbA1c" },
+      },
+    ])
+    .onConflictDoNothing();
 
   await db
     .insert(reports)
