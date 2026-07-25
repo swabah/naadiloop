@@ -19,8 +19,8 @@ In practice, a team of four can still work in parallel — see `workflow.md §5`
 
 | # | Issue | Blocked by | PRD refs | Status |
 |---|---|---|---|---|
-| 001 | Project Scaffold, Stack Wiring & Data Contracts | — (foundational) | §7, §8, §9, §10, §11, §12, §13, §15, §16 | ticketed + planned, not yet implemented (0/11 acceptance criteria met) |
-| 002 | Codebase & Spec Audit: TradeRoute Contamination Check | 001 | — (process/integrity issue) | Part A (spec audit) done as of filing; Part B (codebase audit) blocked on 001's implementation |
+| 001 | Project Scaffold, Stack Wiring & Data Contracts | — (foundational) | §7, §8, §9, §10, §11, §12, §13, §15, §16 | Done |
+| 002 | Codebase & Spec Audit: TradeRoute Contamination Check | 001 | — (process/integrity issue) | Done |
 | 003 | Patient Management & Provider Shell | 002 | §4, §6.1 (US-1), §11 | — |
 | 004 | Document Input & AI Extraction | 003 | §6.1 (US-2/US-3), §9, §11, §12.2 | — |
 | 005 | Verify Care Plan & Activation (human gate #1) | 004 | §6.2 (US-4/US-5), §8.2, §11 | — |
@@ -36,7 +36,7 @@ PRD section numbers above refer to the root `PRD.md` (21 sections — the refine
 
 **Never-cut set** (PRD §17): 004–009 cover the AI extraction, both human gates, the patient journey, and loop closure — the parts of the demo that can never be cut under time pressure. If behind schedule at the 2:30 mark, 010–012 are what compress first, matching PRD §17's own cut order.
 
-**Why 002 is an audit, not a feature.** ISSUE-001 was drafted while this repo still had TradeRoute-era leftovers in its process docs (see `workflow.md`, fixed in commit `a518b2d`). ISSUE-002 exists to confirm that contamination never reached ISSUE-001's actual contract or, once ISSUE-001 is implemented, its generated code — before ISSUE-003 builds anything on top of it. See `issues/ISSUE-002.md`.
+**Why 002 is an audit, not a feature.** ISSUE-001 was drafted while this repo still had TradeRoute-era leftovers in its process docs (see `workflow.md`, fixed in commit `a518b2d`). ISSUE-002 confirmed that contamination did not reach ISSUE-001's actual contract or generated code before ISSUE-003 builds on it. See `done/ISSUE-002.md`.
 
 ## Lifecycle
 

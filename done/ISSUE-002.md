@@ -39,14 +39,35 @@ Once `pnpm install && pnpm dev` actually runs (ISSUE-001's acceptance criteria a
 
 ## Acceptance Criteria
 
-- [ ] Part A: `grep -rliE "TradeRoute|Pareto|corridor|Journey Value|driving cost|slider|scatter plot|value-of-time"` across the whole repo returns zero matches outside files that explicitly and intentionally document this historical incident (this issue, `ISSUE-001.md`, the artifacts touched by commit `a518b2d`).
-- [ ] Part A: every "PRD refs" line in `issues/README.md` and any issue file resolves to a real `##` heading in root `PRD.md`.
-- [ ] Part B (once ISSUE-001 lands): the same grep run against the full generated codebase (`apps/`, `packages/`, lockfiles excluded) returns zero matches.
-- [ ] Part B: every `package.json#name` matches the `@naadi/*` convention.
-- [ ] Part B: `apps/web/src/app.css`'s `@theme` block matches PRD §13.3's token table exactly (hex values, not approximations).
-- [ ] Part B: `packages/db/src/schema.ts`'s six table names and seven enums match PRD §10 verbatim.
-- [ ] Any contamination found is either fixed directly in this issue (small — a stray string, a wrong hex) or spun out into its own follow-up issue (large — e.g. a schema rename) rather than silently left.
-- [ ] Findings are recorded in `done/ISSUE-002.md` — if nothing beyond what's already fixed is found, that's stated explicitly ("audited, clean") rather than the issue being skipped.
+- [x] Part A: `grep -rliE "TradeRoute|Pareto|corridor|Journey Value|driving cost|slider|scatter plot|value-of-time"` across the whole repo returns zero matches outside files that explicitly and intentionally document this historical incident (this issue, `ISSUE-001.md`, the artifacts touched by commit `a518b2d`).
+- [x] Part A: every "PRD refs" line in `issues/README.md` and any issue file resolves to a real `##` heading in root `PRD.md`.
+- [x] Part B (once ISSUE-001 lands): the same grep run against the full generated codebase (`apps/`, `packages/`, lockfiles excluded) returns zero matches.
+- [x] Part B: every `package.json#name` matches the `@naadi/*` convention.
+- [x] Part B: `apps/web/src/app.css`'s `@theme` block matches PRD §13.3's token table exactly (hex values, not approximations).
+- [x] Part B: `packages/db/src/schema.ts`'s six table names and seven enums match PRD §10 verbatim.
+- [x] Any contamination found is either fixed directly in this issue (small — a stray string, a wrong hex) or spun out into its own follow-up issue (large — e.g. a schema rename) rather than silently left.
+- [x] Findings are recorded in `done/ISSUE-002.md` — if nothing beyond what's already fixed is found, that's stated explicitly ("audited, clean") rather than the issue being skipped.
+
+## Audit Findings — 2026-07-25
+
+The live specifications and generated code are audited clean after the following direct fixes:
+
+| Finding | Resolution |
+|---|---|
+| Obsolete `traderoute_complete_specification.pdf` remained at the repository root | Removed |
+| ADR 0002 still described the earlier `encounters` model and cited the wrong PRD section | Replaced with the current `careActions` discriminator + typed JSONB decision |
+| Backlog claimed ISSUE-001 was unimplemented and Part B remained blocked | Updated to the completed/current lifecycle state |
+| Drizzle table exports were singular despite PRD §10's canonical plural identifiers | Renamed all six exports and their internal consumers; SQL names and data were unchanged |
+| Generic route placeholders used the purple `gate` token decoratively | Limited purple treatment to provider verification and report-review routes |
+
+Verification found:
+
+- No prohibited domain term or filename remains outside the explicit historical incident records in ISSUE-001/ISSUE-002 and the backlog explanation.
+- All 48 parsed `PRD refs` citations resolve against headings in root `PRD.md`.
+- Workspace names are exactly `@naadi/web`, `@naadi/server`, `@naadi/api`, and `@naadi/db`.
+- PRD §13.3 core tokens are exact: primary `#0F766E`, accent `#F59E0B`, gate `#7C3AED`.
+- The DB contract exposes six canonical plural tables and seven enums; the reference seed remains the PHC chest-discomfort scenario.
+- No scaffold README or TradeRoute-named commit exists in the ISSUE-001 implementation output.
 
 ## Risks / Open Questions
 
