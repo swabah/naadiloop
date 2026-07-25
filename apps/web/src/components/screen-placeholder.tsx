@@ -38,7 +38,11 @@ export function ScreenPlaceholder({
       </div>
 
       <Card className="overflow-hidden">
-        <div className="h-1.5 bg-gradient-to-r from-primary via-accent to-gate" />
+        <div
+          className={`h-1.5 bg-gradient-to-r ${
+            gate ? "from-gate via-gate/70 to-primary" : "from-primary via-accent to-success"
+          }`}
+        />
         <CardContent className="grid gap-7 p-6 sm:grid-cols-[auto_1fr] sm:p-9">
           <div className="grid size-16 place-items-center rounded-[1.4rem] bg-primary-soft text-primary">
             <Icon className="size-7" />
@@ -62,7 +66,7 @@ export function ScreenPlaceholder({
                 </Button>
               )}
               <div className="flex items-center gap-2 text-xs font-medium text-muted">
-                <ShieldCheck className="size-4 text-gate" />
+                <ShieldCheck className={`size-4 ${gate ? "text-gate" : "text-primary"}`} />
                 Provider verification stays mandatory
               </div>
             </div>

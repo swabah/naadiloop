@@ -62,7 +62,7 @@ export interface CaregiverContact {
   phone?: string;
 }
 
-export const patient = pgTable("patients", {
+export const patients = pgTable("patients", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: text("name").notNull(),
   age: text("age"),
@@ -72,20 +72,20 @@ export const patient = pgTable("patients", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-export const sourceDocument = pgTable("source_documents", {
+export const sourceDocuments = pgTable("source_documents", {
   id: uuid("id").defaultRandom().primaryKey(),
   patientId: uuid("patient_id")
-    .references(() => patient.id)
+    .references(() => patients.id)
     .notNull(),
   documentType: documentType("document_type").notNull(),
   content: text("content").notNull(),
   uploadedAt: timestamp("uploaded_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-export const carePlan = pgTable("care_plans", {
+export const carePlans = pgTable("care_plans", {
   id: uuid("id").defaultRandom().primaryKey(),
   patientId: uuid("patient_id")
-    .references(() => patient.id)
+    .references(() => patients.id)
     .notNull(),
   providerId: uuid("provider_id").notNull(),
   status: carePlanStatus("status").default("draft").notNull(),
@@ -93,10 +93,10 @@ export const carePlan = pgTable("care_plans", {
   verifiedAt: timestamp("verified_at", { withTimezone: true }),
 });
 
-export const careAction = pgTable("care_actions", {
+export const careActions = pgTable("care_actions", {
   id: uuid("id").defaultRandom().primaryKey(),
   carePlanId: uuid("care_plan_id")
-    .references(() => carePlan.id)
+    .references(() => carePlans.id)
     .notNull(),
   type: actionType("type").notNull(),
   title: text("title").notNull(),
@@ -112,10 +112,10 @@ export const careAction = pgTable("care_actions", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-export const report = pgTable("reports", {
+export const reports = pgTable("reports", {
   id: uuid("id").defaultRandom().primaryKey(),
   careActionId: uuid("care_action_id")
-    .references(() => careAction.id)
+    .references(() => careActions.id)
     .notNull(),
   fileUrl: text("file_url").notNull(),
   status: reportStatus("status").default("AWAITING_REVIEW").notNull(),
@@ -124,10 +124,10 @@ export const report = pgTable("reports", {
   reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
 });
 
-export const actionEvent = pgTable("action_events", {
+export const actionEvents = pgTable("action_events", {
   id: uuid("id").defaultRandom().primaryKey(),
   careActionId: uuid("care_action_id")
-    .references(() => careAction.id)
+    .references(() => careActions.id)
     .notNull(),
   eventType: eventType("event_type").notNull(),
   createdBy: text("created_by").notNull(),

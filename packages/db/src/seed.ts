@@ -2,14 +2,14 @@ import { fileURLToPath } from "node:url";
 import { config } from "dotenv";
 import { getDb } from "./client";
 import {
-  actionEvent,
-  careAction,
-  carePlan,
+  actionEvents,
+  careActions,
+  carePlans,
   DEMO_PATIENT_ID,
   DEMO_PROVIDER_ID,
-  patient,
-  report,
-  sourceDocument,
+  patients,
+  reports,
+  sourceDocuments,
 } from "./schema";
 
 config({ path: fileURLToPath(new URL("../../../.env", import.meta.url)), quiet: true });
@@ -42,7 +42,7 @@ async function seed() {
   const now = new Date();
 
   await db
-    .insert(patient)
+    .insert(patients)
     .values({
       id: DEMO_PATIENT_ID,
       name: "Rajan Menon",
@@ -52,7 +52,7 @@ async function seed() {
       caregiverContact: { name: "Maya Menon", phone: "+91 98765 43211" },
     })
     .onConflictDoUpdate({
-      target: patient.id,
+      target: patients.id,
       set: {
         name: "Rajan Menon",
         age: "55",
@@ -63,7 +63,7 @@ async function seed() {
     });
 
   await db
-    .insert(sourceDocument)
+    .insert(sourceDocuments)
     .values({
       id: ids.document,
       patientId: DEMO_PATIENT_ID,
@@ -72,12 +72,12 @@ async function seed() {
         "Take Amlodipine 5 mg once daily after breakfast. Complete a CBC blood test tomorrow. Attend a cardiology consultation within three days. Return to the PHC for follow-up in seven days.",
     })
     .onConflictDoUpdate({
-      target: sourceDocument.id,
+      target: sourceDocuments.id,
       set: { uploadedAt: now },
     });
 
   await db
-    .insert(carePlan)
+    .insert(carePlans)
     .values({
       id: ids.plan,
       patientId: DEMO_PATIENT_ID,
@@ -86,12 +86,12 @@ async function seed() {
       verifiedAt: now,
     })
     .onConflictDoUpdate({
-      target: carePlan.id,
+      target: carePlans.id,
       set: { status: "verified", verifiedAt: now },
     });
 
   await db
-    .insert(careAction)
+    .insert(careActions)
     .values([
       {
         id: ids.medication,
@@ -151,7 +151,7 @@ async function seed() {
       },
     ])
     .onConflictDoUpdate({
-      target: careAction.id,
+      target: careActions.id,
       set: {
         verified: true,
         createdAt: now,
@@ -159,7 +159,7 @@ async function seed() {
     });
 
   await db
-    .insert(report)
+    .insert(reports)
     .values({
       id: ids.report,
       careActionId: ids.test,
@@ -168,12 +168,12 @@ async function seed() {
       uploadedAt: now,
     })
     .onConflictDoUpdate({
-      target: report.id,
+      target: reports.id,
       set: { status: "AWAITING_REVIEW", uploadedAt: now, reviewedAt: null },
     });
 
   await db
-    .insert(actionEvent)
+    .insert(actionEvents)
     .values([
       {
         id: ids.events[0],
