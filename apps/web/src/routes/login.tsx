@@ -42,7 +42,7 @@ export function LoginPage() {
       }
     },
     onError: (err) => {
-      if (err.message.includes("pending Super Admin approval")) {
+      if (err.message.toLowerCase().includes("pending approval")) {
         setIsPendingApproval(true);
         setErrorMessage("Your administration account is pending Super Admin approval.");
       } else {
@@ -73,7 +73,7 @@ export function LoginPage() {
         </div>
         <h1 className="text-3xl font-extrabold text-primary-ink font-display">Sign In</h1>
         <p className="mt-2 text-sm text-muted">
-          Select a role or enter your credentials to access your portal.
+          Enter your credentials to access the portal assigned to your account.
         </p>
       </div>
 

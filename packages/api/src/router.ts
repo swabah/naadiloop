@@ -49,13 +49,6 @@ import {
 
 const JWT_SECRET = process.env.JWT_SECRET || "super-secret-naadi-jwt-key-2026";
 
-function notImplemented(): never {
-  throw new TRPCError({
-    code: "NOT_IMPLEMENTED",
-    message: "This procedure is contracted in ISSUE-001 and implemented in a later issue.",
-  });
-}
-
 function assertPatientAccess(user: { role: string; patientId?: string }, patientId: string) {
   if (user.role === "patient" && user.patientId !== patientId) {
     throw new TRPCError({

@@ -4,7 +4,6 @@ import jwt from "jsonwebtoken";
 
 export type UserRole = "patient" | "hospital_admin" | "pharmacy_admin" | "super_admin" | "provider";
 
-
 export interface AuthedUser {
   id: string;
   name: string;
@@ -15,9 +14,6 @@ export interface AuthedUser {
 }
 
 const JWT_SECRET = process.env.JWT_SECRET || "super-secret-naadi-jwt-key-2026";
-
-
-
 
 export function createContext({ req }: FetchCreateContextFnOptions) {
   let user: AuthedUser | null = null;
@@ -42,7 +38,6 @@ export function createContext({ req }: FetchCreateContextFnOptions) {
       // Invalid JWT token -> fallback to demo role or null
     }
   }
-
 
   return {
     db: getDb(),

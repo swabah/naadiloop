@@ -1,3 +1,4 @@
+import { GoogleGenAI } from "@google/genai";
 import { z } from "zod";
 
 const extractedActionSchema = z
@@ -98,64 +99,44 @@ function parseAndValidate(raw: string, sourceText: string): ExtractedCareAction[
   return output.data.actions;
 }
 
-function createOpenAiRequester(apiKey: string, model: string) {
+function createGeminiRequester(apiKey: string, model: string) {
+  const client = new GoogleGenAI({ apiKey });
+
   return async (prompt: string): Promise<string> => {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 9_500);
-
-    try {
-      const response = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model,
+    const interaction = await client.interactions.create(
+      {
+        model,
+        input: prompt,
+        system_instruction:
+          "You are a literal medical-document extraction engine. Never provide clinical interpretation.",
+        generation_config: {
           temperature: 0,
-          messages: [
-            {
-              role: "system",
-              content:
-                "You are a literal medical-document extraction engine. Never provide clinical interpretation.",
-            },
-            { role: "user", content: prompt },
-          ],
-          response_format: {
-            type: "json_schema",
-            json_schema: {
-              name: "care_action_extraction",
-              strict: true,
-              schema: extractionJsonSchema,
-            },
-          },
-        }),
-        signal: controller.signal,
-      });
+        },
+        response_format: {
+          type: "text",
+          mime_type: "application/json",
+          schema: extractionJsonSchema,
+        },
+      },
+      {
+        timeout: 9_500,
+        maxRetries: 0,
+      },
+    );
 
-      if (!response.ok) {
-        throw new Error(`OpenAI extraction request failed with status ${response.status}.`);
-      }
-
-      const body = (await response.json()) as {
-        choices?: Array<{ message?: { content?: string | null } }>;
-      };
-      const content = body.choices?.[0]?.message?.content;
-      if (!content) {
-        throw new Error("OpenAI returned no extraction output.");
-      }
-      return content;
-    } finally {
-      clearTimeout(timeout);
+    if (!interaction.output_text) {
+      throw new Error("Gemini returned no extraction output.");
     }
+
+    return interaction.output_text;
   };
 }
 
 export async function extractCareActions({
   sourceText,
   now = new Date(),
-  apiKey = process.env.OPENAI_API_KEY,
-  model = process.env.OPENAI_EXTRACTION_MODEL ?? "gpt-4.1-mini",
+  apiKey = process.env.GEMINI_API_KEY,
+  model = process.env.GEMINI_EXTRACTION_MODEL ?? "gemini-2.5-flash",
   request,
 }: ExtractionRequest): Promise<ExtractedCareAction[]> {
   const normalizedSource = sourceText.trim();
@@ -164,10 +145,10 @@ export async function extractCareActions({
   }
 
   if (!request && !apiKey) {
-    throw new Error("OPENAI_API_KEY is not configured on the server.");
+    throw new Error("GEMINI_API_KEY is not configured on the server.");
   }
 
-  const send = request ?? createOpenAiRequester(apiKey as string, model);
+  const send = request ?? createGeminiRequester(apiKey as string, model);
   const prompt = buildPrompt(normalizedSource, now);
 
   let firstValidationError: Error | undefined;
