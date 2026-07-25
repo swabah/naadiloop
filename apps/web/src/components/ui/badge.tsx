@@ -12,6 +12,8 @@ const badgeVariants = cva(
         gate: "bg-gate/10 text-gate",
         warning: "bg-warning/10 text-warning",
         success: "bg-success/10 text-success-ink",
+        info: "bg-primary-soft text-primary-ink",
+        neutral: "border border-border bg-white text-muted",
       },
     },
     defaultVariants: { variant: "default" },
