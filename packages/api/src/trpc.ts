@@ -28,3 +28,6 @@ export const superAdminProcedure = protectedProcedure.use(({ ctx, next }) => {
   });
 });
 
+export const providerProcedure = protectedProcedure;
+
+

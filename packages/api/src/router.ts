@@ -1,10 +1,20 @@
 import { type ExtractedCareAction, extractCareActions } from "@naadi/ai";
-import { careActions, carePlans, patients, sourceDocuments } from "@naadi/db";
+import {
+  actionEvents,
+  careActions,
+  carePlans,
+  eq,
+  organizationDetails,
+  patients,
+  reports,
+  sourceDocuments,
+  users,
+} from "@naadi/db";
 import { TRPCError } from "@trpc/server";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { z } from "zod";
-import { eq, organizationDetails, patients, users } from "@naadi/db";
+
 import {
   actionIdSchema,
   adminApprovalSchema,
@@ -23,7 +33,7 @@ import {
   verifyCarePlanSchema,
 } from "./schemas";
 
-import { protectedProcedure, publicProcedure, router, superAdminProcedure } from "./trpc";
+import { protectedProcedure, providerProcedure, publicProcedure, router, superAdminProcedure } from "./trpc";
 
 const JWT_SECRET = process.env.JWT_SECRET || "super-secret-naadi-jwt-key-2026";
 
@@ -226,10 +236,9 @@ export const appRouter = router({
 
   patient: router({
     list: providerProcedure.query(({ ctx }) =>
-      ctx.db.query.patients.findMany({
-        orderBy: (patient, { asc, desc }) => [desc(patient.createdAt), asc(patient.name)],
-      }),
+      ctx.db.query.patients.findMany(),
     ),
+
     create: providerProcedure.input(patientCreateSchema).mutation(async ({ ctx, input }) => {
       const [patient] = await ctx.db.insert(patients).values(input).returning();
       if (!patient) {
@@ -253,7 +262,7 @@ export const appRouter = router({
   document: router({
     create: providerProcedure.input(documentInputSchema).mutation(async ({ ctx, input }) => {
       const patient = await ctx.db.query.patients.findFirst({
-        where: (record, { eq }) => eq(record.id, input.patientId),
+        where: eq(patients.id, input.patientId),
       });
       if (!patient) {
         throw new TRPCError({
@@ -282,7 +291,7 @@ export const appRouter = router({
       .input(z.object({ documentId: z.string().uuid() }))
       .mutation(async ({ ctx, input }) => {
         const document = await ctx.db.query.sourceDocuments.findFirst({
-          where: (record, { eq }) => eq(record.id, input.documentId),
+          where: eq(sourceDocuments.id, input.documentId),
         });
         if (!document) {
           throw new TRPCError({
@@ -292,8 +301,9 @@ export const appRouter = router({
         }
 
         const patient = await ctx.db.query.patients.findFirst({
-          where: (record, { eq }) => eq(record.id, document.patientId),
+          where: eq(patients.id, document.patientId),
         });
+
         if (!patient) {
           throw new TRPCError({
             code: "NOT_FOUND",
@@ -365,9 +375,10 @@ export const appRouter = router({
             status: "draft" as const,
             createdAt: carePlan.createdAt.toISOString(),
           },
-          actions: actions.map((action) => ({
+          actions: actions.map((action: typeof careActions.$inferSelect) => ({
             ...action,
             dueDate: action.dueDate?.toISOString(),
+
             createdAt: action.createdAt.toISOString(),
           })),
         };

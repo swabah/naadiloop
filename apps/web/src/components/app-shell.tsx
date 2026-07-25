@@ -78,33 +78,49 @@ function HeaderNav() {
           <RoleToggle />
         </div>
       </div>
-      <nav className="mx-auto flex max-w-6xl items-center gap-1 overflow-x-auto px-4 pb-3 sm:px-6">
-        <Link to="/patient/next" className={navLinkClass}>
-          <HeartPulse className="size-4" />
-          Patient home
-        </Link>
-        <Link to="/patient/journey" className={navLinkClass}>
-          <ClipboardList className="size-4" />
-          Journey
-        </Link>
-        <Link to="/provider/dashboard" className={navLinkClass}>
-          <LayoutDashboard className="size-4" />
-          Dashboard
-        </Link>
-        <Link to="/provider/patients" className={navLinkClass}>
-          <UsersRound className="size-4" />
-          Patients
-        </Link>
-        {user?.role === "super_admin" && (
-          <Link to="/admin/approvals" className={navLinkClass}>
-            <ShieldCheck className="size-4 text-purple-600" />
-            Super Admin Approvals
-          </Link>
-        )}
-      </nav>
+      {isAuthenticated && user && (
+        <nav className="mx-auto flex max-w-6xl items-center gap-1 overflow-x-auto px-4 pb-3 sm:px-6">
+          {(user.role === "patient" || user.role === "super_admin") && (
+            <>
+              <Link to="/patient/next" className={navLinkClass}>
+                <HeartPulse className="size-4" />
+                Patient Home
+              </Link>
+              <Link to="/patient/journey" className={navLinkClass}>
+                <ClipboardList className="size-4" />
+                Journey
+              </Link>
+            </>
+          )}
+
+          {(user.role === "hospital_admin" ||
+            user.role === "pharmacy_admin" ||
+            user.role === "provider" ||
+            user.role === "super_admin") && (
+            <>
+              <Link to="/provider/dashboard" className={navLinkClass}>
+                <LayoutDashboard className="size-4" />
+                Provider Dashboard
+              </Link>
+              <Link to="/provider/patients" className={navLinkClass}>
+                <UsersRound className="size-4" />
+                Patients
+              </Link>
+            </>
+          )}
+
+          {user.role === "super_admin" && (
+            <Link to="/admin/approvals" className={navLinkClass}>
+              <ShieldCheck className="size-4 text-purple-600" />
+              Super Admin Approvals
+            </Link>
+          )}
+        </nav>
+      )}
     </header>
   );
 }
+
 
 export function AppShell() {
   return (
