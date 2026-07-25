@@ -1,13 +1,4 @@
-import {
-  boolean,
-  integer,
-  jsonb,
-  pgEnum,
-  pgTable,
-  text,
-  timestamp,
-  uuid,
-} from "drizzle-orm/pg-core";
+import { boolean, jsonb, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
 export const documentType = pgEnum("document_type", [
   "discharge_summary",
@@ -74,7 +65,7 @@ export interface CaregiverContact {
 export const patient = pgTable("patients", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: text("name").notNull(),
-  age: integer("age"),
+  age: text("age"),
   phone: text("phone"),
   language: text("language").default("en").notNull(),
   caregiverContact: jsonb("caregiver_contact").$type<CaregiverContact>(),
