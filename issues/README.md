@@ -19,21 +19,24 @@ In practice, a team of four can still work in parallel — see `workflow.md §5`
 
 | # | Issue | Blocked by | PRD refs | Status |
 |---|---|---|---|---|
-| 001 | Project Scaffold, Stack Wiring & Data Contracts | — (foundational) | §7, §8, §9, §10, §11, §12, §13, §15, §16 | done |
-| 002 | Patient Management & Provider Shell | 001 | §4, §6.1 (US-1), §11 | — |
-| 003 | Document Input & AI Extraction | 002 | §6.1 (US-2/US-3), §9, §11, §12.2 | — |
-| 004 | Verify Care Plan & Activation (human gate #1) | 003 | §6.2 (US-4/US-5), §8.2, §11 | — |
-| 005 | Patient Journey — Next Action & Timeline | 004 | §6.3 (US-6/US-7/US-8), §7.2, §11 | — |
-| 006 | Action Completion, Report Upload & Help Request | 005 | §6.4 (US-9/US-10/US-11), §11 | — |
-| 007 | Provider Dashboard & Care-Gap Detection | 006 | §6.6 (US-15), §8.1, §11 | — |
-| 008 | Report Review & Loop Closure (human gate #2) | 007 | §6.5 (US-12/13/14), §8.2–8.3, §11 | — |
-| 009 | Edge Cases & Error Handling | 008 | §14 | — |
-| 010 | Responsive Layout, Branding & Loop Visualization | 009 | §13, §15, §12.1 | — |
-| 011 | Demo Seed Data, Rehearsal & Deployment | 010 | §16, §17, §18, §19 | — |
+| 001 | Project Scaffold, Stack Wiring & Data Contracts | — (foundational) | §7, §8, §9, §10, §11, §12, §13, §15, §16 | ticketed + planned, not yet implemented (0/11 acceptance criteria met) |
+| 002 | Codebase & Spec Audit: TradeRoute Contamination Check | 001 | — (process/integrity issue) | Part A (spec audit) done as of filing; Part B (codebase audit) blocked on 001's implementation |
+| 003 | Patient Management & Provider Shell | 002 | §4, §6.1 (US-1), §11 | — |
+| 004 | Document Input & AI Extraction | 003 | §6.1 (US-2/US-3), §9, §11, §12.2 | — |
+| 005 | Verify Care Plan & Activation (human gate #1) | 004 | §6.2 (US-4/US-5), §8.2, §11 | — |
+| 006 | Patient Journey — Next Action & Timeline | 005 | §6.3 (US-6/US-7/US-8), §7.2, §11 | — |
+| 007 | Action Completion, Report Upload & Help Request | 006 | §6.4 (US-9/US-10/US-11), §11 | — |
+| 008 | Provider Dashboard & Care-Gap Detection | 007 | §6.6 (US-15), §8.1, §11 | — |
+| 009 | Report Review & Loop Closure (human gate #2) | 008 | §6.5 (US-12/13/14), §8.2–8.3, §11 | — |
+| 010 | Edge Cases & Error Handling | 009 | §14 | — |
+| 011 | Responsive Layout, Branding & Loop Visualization | 010 | §13, §15, §12.1 | — |
+| 012 | Demo Seed Data, Rehearsal & Deployment | 011 | §16, §17, §18, §19 | — |
 
 PRD section numbers above refer to the root `PRD.md` (21 sections — the refined, canonical doc). `naadi-loop-prd.md` is an earlier source document with different section numbering; don't mix the two when citing refs in new issues.
 
-**Never-cut set** (PRD §17): 003–008 cover the AI extraction, both human gates, the patient journey, and loop closure — the parts of the demo that can never be cut under time pressure. If behind schedule at the 2:30 mark, 009–011 are what compress first, matching PRD §17's own cut order.
+**Never-cut set** (PRD §17): 004–009 cover the AI extraction, both human gates, the patient journey, and loop closure — the parts of the demo that can never be cut under time pressure. If behind schedule at the 2:30 mark, 010–012 are what compress first, matching PRD §17's own cut order.
+
+**Why 002 is an audit, not a feature.** ISSUE-001 was drafted while this repo still had TradeRoute-era leftovers in its process docs (see `workflow.md`, fixed in commit `a518b2d`). ISSUE-002 exists to confirm that contamination never reached ISSUE-001's actual contract or, once ISSUE-001 is implemented, its generated code — before ISSUE-003 builds anything on top of it. See `issues/ISSUE-002.md`.
 
 ## Lifecycle
 
