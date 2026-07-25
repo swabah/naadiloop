@@ -2,11 +2,14 @@ import { type DocumentExtractionResult, documentExtractionResultSchema } from "@
 
 const keyPrefix = "naadi:provider-extraction:";
 
-export function saveExtractionHandoff(result: DocumentExtractionResult): void {
+export type ExtractionHandoff = DocumentExtractionResult;
+export type ExtractionHandoffAction = DocumentExtractionResult["actions"][number];
+
+export function saveExtractionHandoff(result: ExtractionHandoff): void {
   sessionStorage.setItem(`${keyPrefix}${result.carePlan.id}`, JSON.stringify(result));
 }
 
-export function loadExtractionHandoff(carePlanId: string): DocumentExtractionResult | null {
+export function loadExtractionHandoff(carePlanId: string): ExtractionHandoff | null {
   const stored = sessionStorage.getItem(`${keyPrefix}${carePlanId}`);
   if (!stored) return null;
 

@@ -306,3 +306,79 @@ When ISSUE-004 lands in `done/`:
    3.6 / 3.7 / 3.8 (UI) → 3.10 (build).
 3. Update this plan's §6 with the execution record (matches the format
    used by ISSUE-001 / ISSUE-003) before moving ISSUE-005 to `done/`.
+
+## 7. Execution record
+
+Implementation followed this plan with two significant adaptations to the
+ISSUE-004 / handoff reality on `main`:
+
+- **Schema change (added).** `care_plans` needed a `source_document_id`
+  foreign key to look up source content for the source-traceability check
+  and to keep the `carePlan.getDraft` query's read path symmetric with the
+  write path. One new column, nullable for backwards compatibility, no
+  data migration beyond the seeded row's `source_document_id` set in
+  `seed.ts`. `pnpm db:push` is required.
+- **Routing adapted to query params, not a path segment.** The other
+  developer working on ISSUE-004 already wired the verify route as
+  `/provider/patients/$patientId/verify?carePlanId=…&manual=…` with a
+  session-storage handoff. Folding into the existing shape was cheaper
+  than rewriting, so the page now reads from the handoff first and
+  falls back to a DB-backed `carePlan.getDraft` query for after-save
+  reloads.
+- **`carePlan.verify` is now the update path; a new
+  `carePlan.commitDraft` bridges the handoff to the database.** The
+  handoff's `carePlan.id` is a client-side UUID with no DB row, so the
+  first "Save verification" call persists the source document, the
+  care plan (`status: "verified"`), and the action set
+  (`verified: true`) in one transaction, then the page switches to the
+  real DB care plan and the next save calls the original `verify`
+  procedure as the update path. `carePlan.activate` is unchanged.
+- **UI is fully editable.** Type / title / instructions / due date /
+  priority / assignee / review-required / source sentence are all
+  editable per card, with add / delete controls and a live
+  "Source matched" / "Not in source" badge against the loaded source
+  document. The "Activate care journey" button is gate-coloured and
+  is only enabled once `carePlan.verify` (or `commitDraft`) has
+  produced a verified plan in the DB.
+
+Files touched (content changes only — line-ending churn on the rest of
+the web app was left out of this commit):
+
+- `packages/db/src/schema.ts` — added `source_document_id` to `care_plans`.
+- `packages/db/src/seed.ts` — linked the existing verified plan to its
+  source document and added a draft plan + draft document + two draft
+  actions so the verify page is reachable end-to-end without a live
+  extraction.
+- `packages/api/src/care-plan/source-text.ts` — pure helper for
+  `sourceTextAppearsIn`, the source-traceability check.
+- `packages/api/src/router-care-plan.ts` — new router implementing
+  `carePlan.getDraft`, `carePlan.commitDraft`, `carePlan.verify`, and
+  `carePlan.activate`, each opening a Drizzle transaction so the action
+  rows + the `ActionEvent` rows + the plan status change land atomically.
+- `packages/api/src/router.ts` — wires the new router in, drops the
+  unused `verifyCarePlanSchema` import (now consumed in
+  `router-care-plan.ts`).
+- `packages/api/package.json` — adds `drizzle-orm` as an explicit
+  dependency for the operators used in `router-care-plan.ts`.
+- `apps/web/src/lib/extraction-handoff.ts` — re-exports the
+  `ExtractionHandoffAction` type used by the page.
+- `apps/web/src/routes/provider/verify.tsx` — full rewrite: editable
+  cards, source-document panel, save verification (with the commit/
+  update switch), gate-coloured activate button, validation errors.
+
+`pnpm typecheck`, `pnpm check`, and `pnpm build` (vite production
+build) pass; `pnpm db:push` against an isolated Neon branch was the
+one-time schema change. Standards review: the frozen `appRouter`
+contract is unchanged, the role guard is widened from
+`protectedProcedure` to `providerProcedure` only for the two
+mutations and the new read is `protectedProcedure` (a patient role
+should not be able to see another provider's draft, but a patient
+seeing their own verified plan after activation is expected — ISSUE-006
+will own that filter). The verify route deep-links to a real DB plan
+after the first save, so the "draft or merely verified plans are
+absent from Patient queries" acceptance criterion is preserved by
+construction: the only path into `carePlan.activate` is via a real
+DB row in `status = "verified"`, and the patient-side queries
+(`patient.journey`, `patient.nextAction`) remain `NOT_IMPLEMENTED`
+in this slice.
+

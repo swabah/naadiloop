@@ -23,12 +23,12 @@ import {
   projectPatientJourney,
   selectNextPatientAction,
 } from "./patient-actions";
+import { carePlanRouter } from "./router-care-plan";
 import {
   actionIdSchema,
   adminApprovalSchema,
   careActionSchema,
   careGapListSchema,
-  carePlanIdSchema,
   completeActionSchema,
   documentInputSchema,
   helpRequestSchema,
@@ -38,7 +38,6 @@ import {
   registerInputSchema,
   reviewReportSchema,
   uploadReportSchema,
-  verifyCarePlanSchema,
 } from "./schemas";
 import {
   protectedProcedure,
@@ -764,10 +763,7 @@ export const appRouter = router({
         };
       }),
   }),
-  carePlan: router({
-    verify: protectedProcedure.input(verifyCarePlanSchema).mutation(notImplemented),
-    activate: protectedProcedure.input(carePlanIdSchema).mutation(notImplemented),
-  }),
+  carePlan: carePlanRouter,
   provider: router({
     dashboard: providerProcedure.query(({ ctx }) => buildProviderDashboard(ctx.db)),
     reportDetails: providerProcedure

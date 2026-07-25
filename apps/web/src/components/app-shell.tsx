@@ -91,7 +91,6 @@ function HeaderNav() {
 
           {(user.role === "hospital_admin" ||
             user.role === "pharmacy_admin" ||
-            user.role === "provider" ||
             user.role === "super_admin") && (
             <>
               <Link to="/provider/dashboard" className={navLinkClass}>
