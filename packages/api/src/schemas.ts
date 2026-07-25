@@ -132,6 +132,40 @@ export const documentInputSchema = z.object({
   content: z.string().trim().min(1).max(100_000),
 });
 
+export const documentExtractionResultSchema = z.object({
+  document: z.object({
+    id: z.string().uuid(),
+    patientId: z.string().uuid(),
+    documentType: documentTypeSchema,
+    content: z.string(),
+    uploadedAt: z.string().datetime({ offset: true }),
+  }),
+  patient: z.object({
+    id: z.string().uuid(),
+    name: z.string(),
+  }),
+  carePlan: z.object({
+    id: z.string().uuid(),
+    patientId: z.string().uuid(),
+    providerId: z.string().uuid(),
+    status: z.literal("draft"),
+    createdAt: z.string().datetime({ offset: true }),
+  }),
+  actions: z.array(
+    careActionSchema.and(
+      z.object({
+        id: z.string().uuid(),
+        carePlanId: z.string().uuid(),
+        status: z.literal("PENDING"),
+        verified: z.literal(false),
+        createdAt: z.string().datetime({ offset: true }),
+      }),
+    ),
+  ),
+});
+
+export type DocumentExtractionResult = z.infer<typeof documentExtractionResultSchema>;
+
 export const completeActionSchema = z.object({
   actionId: z.string().uuid(),
   outcome: z.enum(["taken", "skipped", "help"]),
