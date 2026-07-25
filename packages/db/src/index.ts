@@ -1,2 +1,3 @@
-export { getDb } from "./client";
+export { getDb, initializeDatabaseSchema } from "./client";
 export * from "./schema";
+

@@ -1,5 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { config } from "dotenv";
+import bcrypt from "bcryptjs";
 import { getDb } from "./client";
 import {
   actionEvents,
@@ -7,12 +8,17 @@ import {
   carePlans,
   DEMO_PATIENT_ID,
   DEMO_PROVIDER_ID,
+  organizationDetails,
   patients,
   reports,
   sourceDocuments,
+  users,
 } from "./schema";
 
 config({ path: fileURLToPath(new URL("../../../.env", import.meta.url)), quiet: true });
+
+const SUPERADMIN_ID = "00000000-0000-4000-8000-000000000001";
+const PENDING_ADMIN_ID = "80000000-0000-4000-8000-000000000001";
 
 const ids = {
   document: "30000000-0000-4000-8000-000000000001",
@@ -41,8 +47,84 @@ async function seed() {
   const db = getDb(process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL);
   const now = new Date();
 
+  // Hash passwords
+  const adminPassword = await bcrypt.hash("admin123", 10);
+  const userPassword = await bcrypt.hash("password123", 10);
+
+  // 1. Seed users
+  await db
+    .insert(users)
+    .values([
+      {
+        id: SUPERADMIN_ID,
+        email: "superadmin@naadi.demo",
+        passwordHash: adminPassword,
+        name: "Super Admin",
+        phone: "+91 90000 00000",
+        role: "super_admin",
+        status: "active",
+      },
+      {
+        id: DEMO_PROVIDER_ID,
+        email: "anjali@naadi.demo",
+        passwordHash: userPassword,
+        name: "Dr. Anjali Nair",
+        phone: "+91 98765 00001",
+        role: "hospital_admin",
+        status: "active",
+      },
+      {
+        id: DEMO_PATIENT_ID,
+        email: "rajan@naadi.demo",
+        passwordHash: userPassword,
+        name: "Rajan Menon",
+        phone: "+91 98765 43210",
+        role: "patient",
+        status: "active",
+        aadhaarNumber: "123456789012",
+      },
+      {
+        id: PENDING_ADMIN_ID,
+        email: "kerala.pharmacy@naadi.demo",
+        passwordHash: userPassword,
+        name: "Kerala Central Meds",
+        phone: "+91 98765 99999",
+        role: "pharmacy_admin",
+        status: "pending_approval",
+      },
+    ])
+    .onConflictDoNothing();
+
+  // 2. Seed organization details
+  await db
+    .insert(organizationDetails)
+    .values([
+      {
+        userId: DEMO_PROVIDER_ID,
+        orgName: "CityCare Multispecialty Hospital",
+        orgType: "hospital",
+        licenseNumber: "HOSP-44321",
+        address: "123 Health Avenue",
+        city: "Kochi",
+        state: "Kerala",
+        pincode: "682001",
+      },
+      {
+        userId: PENDING_ADMIN_ID,
+        orgName: "Kerala Central Pharmacy",
+        orgType: "pharmacy",
+        licenseNumber: "PHARM-88712",
+        address: "45 MG Road",
+        city: "Kochi",
+        state: "Kerala",
+        pincode: "682016",
+      },
+    ])
+    .onConflictDoNothing();
+
   await db
     .insert(patients)
+
     .values({
       id: DEMO_PATIENT_ID,
       name: "Rajan Menon",
