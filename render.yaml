@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: naadi-loop-server
+    env: node
+    buildCommand: pnpm install
+    startCommand: pnpm --filter @naadi/server start
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: PORT
+        value: 10000
