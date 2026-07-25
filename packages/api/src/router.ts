@@ -4,17 +4,20 @@ import {
   careActions,
   carePlans,
   type getDb,
+  organizationDetails,
   patients,
   reports,
   sourceDocuments,
+  users,
 } from "@naadi/db";
 import { TRPCError } from "@trpc/server";
+import bcrypt from "bcryptjs";
 import { and, asc, desc, eq, isNull } from "drizzle-orm";
+import jwt from "jsonwebtoken";
 import { z } from "zod";
 import { patientOutcomeTransition, reportUploadTransition } from "./action-transitions";
 import { dashboardSectionFor, evaluateCareGaps } from "./care-gaps";
 import { canCloseAction } from "./closure-policy";
-import { getDemoUserByEmail } from "./context";
 import {
   type PatientActionRecord,
   projectPatientJourney,
@@ -22,19 +25,30 @@ import {
 } from "./patient-actions";
 import {
   actionIdSchema,
+  adminApprovalSchema,
   careActionSchema,
   careGapListSchema,
   carePlanIdSchema,
   completeActionSchema,
   documentInputSchema,
   helpRequestSchema,
+  loginInputSchema,
   patientCreateSchema,
   patientIdSchema,
+  registerInputSchema,
   reviewReportSchema,
   uploadReportSchema,
   verifyCarePlanSchema,
 } from "./schemas";
-import { protectedProcedure, providerProcedure, publicProcedure, router } from "./trpc";
+import {
+  protectedProcedure,
+  providerProcedure,
+  publicProcedure,
+  router,
+  superAdminProcedure,
+} from "./trpc";
+
+const JWT_SECRET = process.env.JWT_SECRET || "super-secret-naadi-jwt-key-2026";
 
 function notImplemented(): never {
   throw new TRPCError({
@@ -113,7 +127,6 @@ async function rejectRecentDuplicateEvent(
 
 function serializePatientAction<
   T extends PatientActionRecord & {
-    [key: string]: unknown;
     dueDate: Date | null;
     createdAt: Date;
   },
@@ -249,19 +262,149 @@ async function buildProviderDashboard(db: ReturnType<typeof getDb>, patientId?: 
 
 export const appRouter = router({
   auth: router({
-    login: publicProcedure
-      .input(z.object({ email: z.string().trim().toLowerCase().email("Enter a valid email.") }))
-      .mutation(({ input }) => {
-        const user = getDemoUserByEmail(input.email);
-        if (!user) {
+    register: publicProcedure.input(registerInputSchema).mutation(async ({ ctx, input }) => {
+      const email = input.email.toLowerCase();
+      const existingUser = await ctx.db.query.users.findFirst({
+        where: eq(users.email, email),
+      });
+      if (existingUser) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: "An account with this email address already exists.",
+        });
+      }
+
+      const aadhaarNumber =
+        input.role === "patient" ? input.aadhaarNumber?.replace(/\s+/g, "") : undefined;
+      if (aadhaarNumber) {
+        const existingAadhaar = await ctx.db.query.users.findFirst({
+          where: eq(users.aadhaarNumber, aadhaarNumber),
+        });
+        if (existingAadhaar) {
           throw new TRPCError({
-            code: "UNAUTHORIZED",
-            message: "Use one of the seeded demo identities to continue.",
+            code: "CONFLICT",
+            message: "A Patient with this Aadhaar number is already registered.",
           });
         }
-        return user;
-      }),
+      }
+
+      const status = input.role === "patient" ? "active" : "pending_approval";
+      const [user] = await ctx.db
+        .insert(users)
+        .values({
+          name: input.name,
+          email,
+          passwordHash: await bcrypt.hash(input.password, 10),
+          phone: input.phone,
+          role: input.role,
+          status,
+          aadhaarNumber,
+        })
+        .returning();
+      if (!user) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "The account could not be created. Please try again.",
+        });
+      }
+
+      if (input.role === "patient") {
+        await ctx.db.insert(patients).values({
+          id: user.id,
+          name: input.name,
+          age: input.age ?? null,
+          phone: input.phone ?? null,
+          language: input.language ?? "en",
+        });
+      } else {
+        await ctx.db.insert(organizationDetails).values({
+          userId: user.id,
+          orgName: input.orgName ?? `${input.name}'s Facility`,
+          orgType: input.role === "hospital_admin" ? "hospital" : "pharmacy",
+          licenseNumber: input.licenseNumber ?? "PENDING",
+          address: input.address,
+          city: input.city,
+          state: input.state,
+          pincode: input.pincode,
+        });
+      }
+
+      return {
+        success: true,
+        status,
+        message:
+          input.role === "patient"
+            ? "Registration successful! You can now log in."
+            : "Registration submitted. Your administration account is pending approval.",
+      };
+    }),
+    login: publicProcedure.input(loginInputSchema).mutation(async ({ ctx, input }) => {
+      const user = await ctx.db.query.users.findFirst({
+        where: eq(users.email, input.email.toLowerCase()),
+      });
+      if (!user || !(await bcrypt.compare(input.password, user.passwordHash))) {
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "Invalid email or password.",
+        });
+      }
+      if (user.status !== "active") {
+        if (user.status === "pending_approval") {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Your administration account is pending approval.",
+          });
+        }
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Your administration account registration was rejected.",
+        });
+      }
+
+      const payload = {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        status: user.status,
+        patientId: user.role === "patient" ? user.id : undefined,
+      };
+      return {
+        token: jwt.sign(payload, JWT_SECRET, { expiresIn: "7d" }),
+        user: payload,
+      };
+    }),
     me: protectedProcedure.query(({ ctx }) => ctx.user),
+  }),
+  admin: router({
+    pendingApprovals: superAdminProcedure.query(async ({ ctx }) => {
+      const pendingUsers = await ctx.db.query.users.findMany({
+        where: eq(users.status, "pending_approval"),
+      });
+      const userIds = pendingUsers.map((user) => user.id);
+      const organizations =
+        userIds.length > 0 ? await ctx.db.query.organizationDetails.findMany() : [];
+      const organizationByUser = new Map(
+        organizations
+          .filter((organization) => userIds.includes(organization.userId))
+          .map((organization) => [organization.userId, organization]),
+      );
+      return pendingUsers.map((user) => ({
+        ...user,
+        organization: organizationByUser.get(user.id) ?? null,
+      }));
+    }),
+    approveUser: superAdminProcedure.input(adminApprovalSchema).mutation(async ({ ctx, input }) => {
+      const [updated] = await ctx.db
+        .update(users)
+        .set({ status: input.action === "approve" ? "active" : "rejected" })
+        .where(eq(users.id, input.userId))
+        .returning();
+      if (!updated) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "User account not found." });
+      }
+      return { success: true, userId: updated.id, status: updated.status };
+    }),
   }),
   patient: router({
     list: providerProcedure.query(({ ctx }) =>

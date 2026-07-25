@@ -204,3 +204,65 @@ export const careGapListSchema = z
     patientId: z.string().uuid().optional(),
   })
   .optional();
+
+export const userRoleSchema = z.enum([
+  "patient",
+  "hospital_admin",
+  "pharmacy_admin",
+  "super_admin",
+]);
+
+export const registerInputSchema = z
+  .object({
+    name: z.string().trim().min(1, "Name is required").max(160),
+    email: z.string().trim().email("Invalid email address"),
+    password: z.string().min(6, "Password must be at least 6 characters"),
+    phone: z.string().trim().optional(),
+    role: z.enum(["patient", "hospital_admin", "pharmacy_admin"]),
+    // Patient specific
+    aadhaarNumber: z.string().trim().optional(),
+    age: z.string().trim().optional(),
+    gender: z.string().trim().optional(),
+    language: z.string().trim().default("en"),
+    // Organization specific (Hospital / Pharmacy)
+    orgName: z.string().trim().optional(),
+    licenseNumber: z.string().trim().optional(),
+    address: z.string().trim().optional(),
+    city: z.string().trim().optional(),
+    state: z.string().trim().optional(),
+    pincode: z.string().trim().optional(),
+  })
+  .refine(
+    (data) => {
+      if (data.role === "patient") {
+        return !!data.aadhaarNumber && /^\d{12}$/.test(data.aadhaarNumber.replace(/\s+/g, ""));
+      }
+      return true;
+    },
+    {
+      message: "12-digit Aadhaar number is required for patient registration",
+      path: ["aadhaarNumber"],
+    },
+  )
+  .refine(
+    (data) => {
+      if (data.role === "hospital_admin" || data.role === "pharmacy_admin") {
+        return !!data.orgName && !!data.licenseNumber;
+      }
+      return true;
+    },
+    {
+      message: "Organization name and license number are required for administration registration",
+      path: ["orgName"],
+    },
+  );
+
+export const loginInputSchema = z.object({
+  email: z.string().trim().email("Invalid email address"),
+  password: z.string().min(1, "Password is required"),
+});
+
+export const adminApprovalSchema = z.object({
+  userId: z.string().uuid("Invalid user ID"),
+  action: z.enum(["approve", "reject"]),
+});

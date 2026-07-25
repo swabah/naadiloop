@@ -8,9 +8,10 @@ export const app = new Hono();
 app.use(
   "/trpc/*",
   cors({
-    origin: ["http://localhost:5173", "http://127.0.0.1:5173"],
-    allowHeaders: ["Content-Type", "x-demo-role"],
-    allowMethods: ["GET", "POST", "OPTIONS"],
+    origin: (origin) => origin || "*",
+    allowHeaders: ["Content-Type", "Authorization", "x-demo-role", "x-trpc-source"],
+    allowMethods: ["GET", "POST", "OPTIONS", "HEAD"],
+    credentials: true,
   }),
 );
 

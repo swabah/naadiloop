@@ -48,6 +48,15 @@ export const eventType = pgEnum("event_type", [
   "follow_up_created",
 ]);
 
+export const userRole = pgEnum("user_role", [
+  "patient",
+  "hospital_admin",
+  "pharmacy_admin",
+  "super_admin",
+]);
+
+export const userStatus = pgEnum("user_status", ["active", "pending_approval", "rejected"]);
+
 export interface MedicationPayload {
   schedule?: string;
   durationDays?: number;
@@ -144,6 +153,33 @@ export const actionEvents = pgTable("action_events", {
   createdBy: text("created_by").notNull(),
   notes: text("notes"),
   timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const users = pgTable("users", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  email: text("email").notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  name: text("name").notNull(),
+  phone: text("phone"),
+  role: userRole("role").notNull(),
+  status: userStatus("status").default("active").notNull(),
+  aadhaarNumber: text("aadhaar_number").unique(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const organizationDetails = pgTable("organization_details", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id")
+    .references(() => users.id)
+    .notNull(),
+  orgName: text("org_name").notNull(),
+  orgType: text("org_type").notNull(),
+  licenseNumber: text("license_number").notNull(),
+  address: text("address"),
+  city: text("city"),
+  state: text("state"),
+  pincode: text("pincode"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
 export const DEMO_PROVIDER_ID = "10000000-0000-4000-8000-000000000001";
