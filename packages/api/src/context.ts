@@ -3,6 +3,8 @@ import { DEMO_PATIENT_ID, DEMO_PROVIDER_ID, getDb } from "@naadi/db";
 import type { FetchCreateContextFnOptions } from "@trpc/server/adapters/fetch";
 
 export type UserRole = "patient" | "hospital_admin" | "pharmacy_admin" | "super_admin" | "provider";
+export type DemoRole = "patient" | "provider";
+
 
 export interface AuthedUser {
   id: string;
