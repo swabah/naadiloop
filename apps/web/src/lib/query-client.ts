@@ -1,6 +1,6 @@
 import { QueryClient } from "@tanstack/react-query";
 import { httpBatchLink } from "@trpc/client";
-import { getDemoRole } from "./role";
+
 import { trpc } from "./trpc";
 
 export const queryClient = new QueryClient({
@@ -19,7 +19,6 @@ export const trpcClient = trpc.createClient({
       headers: () => {
         const token = localStorage.getItem("naadi_jwt_token");
         return {
-          "x-demo-role": getDemoRole(),
           ...(token ? { authorization: `Bearer ${token}` } : {}),
         };
       },
