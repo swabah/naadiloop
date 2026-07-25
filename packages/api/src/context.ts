@@ -15,7 +15,9 @@ export interface AuthedUser {
 
 const JWT_SECRET = process.env.JWT_SECRET || "super-secret-naadi-jwt-key-2026";
 
-const demoUsers: Record<"provider" | "patient", AuthedUser> = {
+type DemoRole = "provider" | "patient";
+
+const demoUsers: Record<DemoRole, AuthedUser> = {
   provider: {
     id: DEMO_PROVIDER_ID,
     name: "Dr. Anjali Nair",

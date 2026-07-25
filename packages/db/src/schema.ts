@@ -102,6 +102,7 @@ export const carePlans = pgTable("care_plans", {
     .references(() => patients.id)
     .notNull(),
   providerId: uuid("provider_id").notNull(),
+  sourceDocumentId: uuid("source_document_id").references(() => sourceDocuments.id),
   status: carePlanStatus("status").default("draft").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   verifiedAt: timestamp("verified_at", { withTimezone: true }),

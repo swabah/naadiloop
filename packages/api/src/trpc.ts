@@ -28,3 +28,13 @@ export const superAdminProcedure = protectedProcedure.use(({ ctx, next }) => {
   });
 });
 
+export const providerProcedure = protectedProcedure.use(({ ctx, next }) => {
+  if (ctx.user.role !== "provider") {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Access restricted to Providers." });
+  }
+
+  return next({
+    ctx,
+  });
+});
+
