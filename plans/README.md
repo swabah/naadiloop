@@ -13,7 +13,7 @@ A plan is concrete enough that someone other than its author could execute it. A
 1. **Restate the goal** in one or two sentences — copy the issue's "why," don't reinterpret it.
 2. **Interface first**: the exact types, function signatures, or component props this issue introduces or consumes, written before any implementation detail. This is where `codebase-design` thinking belongs (see `../workflow.md`) — get the seam right before filling it in.
 3. **File-by-file steps**: every file to create or touch, in the order they should be touched, with a one-line note on what changes.
-4. **Test / verification approach**: for pure logic (calculators, the tradeoff engine), this means the test cases that prove correctness — see `workflow.md`'s TDD guidance. For UI, this means the manual check against each acceptance criterion in the issue, and a note on which breakpoints/themes to eyeball.
+4. **Test / verification approach**: for pure logic (the care-gap rule evaluators, the `actionStatus` transition function), this means the test cases that prove correctness — see `workflow.md`'s TDD guidance. For UI, this means the manual check against each acceptance criterion in the issue, and a note on which breakpoints/themes to eyeball.
 5. **Risks or open questions** the author isn't fully sure about — flag them rather than silently picking an answer, especially anything touching a number a judge might question (see PRD §18).
 
 ## When a plan is done
