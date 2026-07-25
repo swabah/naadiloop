@@ -90,6 +90,9 @@ const patientReportRoute = createRoute({
 const patientHelpRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/patient/help",
+  validateSearch: z.object({
+    actionId: z.string().uuid().optional(),
+  }),
   component: PatientHelpPage,
 });
 

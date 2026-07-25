@@ -82,12 +82,12 @@ async function seed() {
       id: ids.plan,
       patientId: DEMO_PATIENT_ID,
       providerId: DEMO_PROVIDER_ID,
-      status: "verified",
+      status: "active",
       verifiedAt: now,
     })
     .onConflictDoUpdate({
       target: carePlans.id,
-      set: { status: "verified", verifiedAt: now },
+      set: { status: "active", verifiedAt: now },
     });
 
   await db

@@ -1,4 +1,13 @@
-import { boolean, jsonb, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import {
+  type AnyPgColumn,
+  boolean,
+  jsonb,
+  pgEnum,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+} from "drizzle-orm/pg-core";
 
 export const documentType = pgEnum("document_type", [
   "discharge_summary",
@@ -31,6 +40,7 @@ export const eventType = pgEnum("event_type", [
   "activated",
   "completed",
   "skipped",
+  "reminder_requested",
   "help_requested",
   "review_started",
   "reviewed",
@@ -108,6 +118,8 @@ export const careActions = pgTable("care_actions", {
   assignedTo: text("assigned_to").default("patient").notNull(),
   reviewRequired: boolean("review_required").default(false).notNull(),
   verified: boolean("verified").default(false).notNull(),
+  nextStepCommunicated: boolean("next_step_communicated").default(false).notNull(),
+  parentActionId: uuid("parent_action_id").references((): AnyPgColumn => careActions.id),
   payload: jsonb("payload").$type<CareActionPayload>().default({}).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
@@ -126,9 +138,8 @@ export const reports = pgTable("reports", {
 
 export const actionEvents = pgTable("action_events", {
   id: uuid("id").defaultRandom().primaryKey(),
-  careActionId: uuid("care_action_id")
-    .references(() => careActions.id)
-    .notNull(),
+  careActionId: uuid("care_action_id").references(() => careActions.id),
+  patientId: uuid("patient_id").references(() => patients.id),
   eventType: eventType("event_type").notNull(),
   createdBy: text("created_by").notNull(),
   notes: text("notes"),

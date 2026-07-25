@@ -168,15 +168,20 @@ export type DocumentExtractionResult = z.infer<typeof documentExtractionResultSc
 
 export const completeActionSchema = z.object({
   actionId: z.string().uuid(),
-  outcome: z.enum(["taken", "skipped", "help"]),
+  outcome: z.enum(["completed", "taken", "skipped", "remind", "help"]),
   notes: z.string().trim().max(1_000).optional(),
 });
 
-export const helpRequestSchema = z.object({
-  actionId: z.string().uuid(),
-  kind: z.enum(["caregiver", "transport", "understanding", "provider"]),
-  notes: z.string().trim().max(1_000).optional(),
-});
+export const helpRequestSchema = z
+  .object({
+    actionId: z.string().uuid().optional(),
+    patientId: z.string().uuid().optional(),
+    kind: z.enum(["caregiver", "transport", "understanding", "provider"]),
+    notes: z.string().trim().max(1_000).optional(),
+  })
+  .refine((input) => input.actionId || input.patientId, {
+    message: "Choose a Care action or Patient for this help request.",
+  });
 
 export const uploadReportSchema = z.object({
   actionId: z.string().uuid(),
