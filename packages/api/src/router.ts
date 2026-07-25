@@ -1,5 +1,7 @@
+import { patients } from "@naadi/db";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { getDemoUserByEmail } from "./context";
 import {
   actionIdSchema,
   careActionSchema,
@@ -14,7 +16,7 @@ import {
   uploadReportSchema,
   verifyCarePlanSchema,
 } from "./schemas";
-import { protectedProcedure, publicProcedure, router } from "./trpc";
+import { protectedProcedure, providerProcedure, publicProcedure, router } from "./trpc";
 
 function notImplemented(): never {
   throw new TRPCError({
@@ -25,12 +27,36 @@ function notImplemented(): never {
 
 export const appRouter = router({
   auth: router({
-    login: publicProcedure.input(z.object({ email: z.string().email() })).mutation(notImplemented),
-    me: protectedProcedure.query(notImplemented),
+    login: publicProcedure
+      .input(z.object({ email: z.string().trim().toLowerCase().email("Enter a valid email.") }))
+      .mutation(({ input }) => {
+        const user = getDemoUserByEmail(input.email);
+        if (!user) {
+          throw new TRPCError({
+            code: "UNAUTHORIZED",
+            message: "Use one of the seeded demo identities to continue.",
+          });
+        }
+        return user;
+      }),
+    me: protectedProcedure.query(({ ctx }) => ctx.user),
   }),
   patient: router({
-    list: protectedProcedure.query(notImplemented),
-    create: protectedProcedure.input(patientCreateSchema).mutation(notImplemented),
+    list: providerProcedure.query(({ ctx }) =>
+      ctx.db.query.patients.findMany({
+        orderBy: (patient, { asc, desc }) => [desc(patient.createdAt), asc(patient.name)],
+      }),
+    ),
+    create: providerProcedure.input(patientCreateSchema).mutation(async ({ ctx, input }) => {
+      const [patient] = await ctx.db.insert(patients).values(input).returning();
+      if (!patient) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "The Patient could not be created. Please try again.",
+        });
+      }
+      return patient;
+    }),
     nextAction: protectedProcedure.input(patientIdSchema).query(notImplemented),
     journey: protectedProcedure.input(patientIdSchema).query(notImplemented),
     actionDetails: protectedProcedure.input(actionIdSchema).query(notImplemented),
