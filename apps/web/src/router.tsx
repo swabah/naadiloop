@@ -2,6 +2,9 @@ import { createRootRoute, createRoute, createRouter } from "@tanstack/react-rout
 import { z } from "zod";
 import { AppShell } from "./components/app-shell";
 import { LandingPage } from "./routes";
+import { AdminApprovalsPage } from "./routes/admin/approvals";
+import { LoginPage } from "./routes/login";
+import { RegisterPage } from "./routes/register";
 import { PatientActionPage } from "./routes/patient/action";
 import { PatientHelpPage } from "./routes/patient/help";
 import { PatientJourneyPage } from "./routes/patient/journey";
@@ -12,6 +15,7 @@ import { ProviderDocumentPage } from "./routes/provider/document";
 import { ProviderPatientsPage } from "./routes/provider/patients";
 import { ProviderReportPage } from "./routes/provider/report";
 import { ProviderVerifyPage } from "./routes/provider/verify";
+
 
 const rootRoute = createRootRoute({
   component: AppShell,
@@ -93,8 +97,29 @@ const patientHelpRoute = createRoute({
   component: PatientHelpPage,
 });
 
+const registerRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/register",
+  component: RegisterPage,
+});
+
+const loginRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/login",
+  component: LoginPage,
+});
+
+const adminApprovalsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/admin/approvals",
+  component: AdminApprovalsPage,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
+  registerRoute,
+  loginRoute,
+  adminApprovalsRoute,
   providerPatientsRoute,
   providerDocumentRoute,
   providerVerifyRoute,
@@ -106,6 +131,7 @@ const routeTree = rootRoute.addChildren([
   patientReportRoute,
   patientHelpRoute,
 ]);
+
 
 export const router = createRouter({ routeTree });
 

@@ -7,7 +7,7 @@ export const router = t.router;
 export const publicProcedure = t.procedure;
 export const protectedProcedure = t.procedure.use(({ ctx, next }) => {
   if (!ctx.user) {
-    throw new TRPCError({ code: "UNAUTHORIZED", message: "Select a demo role to continue." });
+    throw new TRPCError({ code: "UNAUTHORIZED", message: "Please log in to continue." });
   }
 
   return next({
@@ -18,18 +18,13 @@ export const protectedProcedure = t.procedure.use(({ ctx, next }) => {
   });
 });
 
-export const providerProcedure = protectedProcedure.use(({ ctx, next }) => {
-  if (ctx.user.role !== "provider") {
-    throw new TRPCError({
-      code: "FORBIDDEN",
-      message: "Switch to the Provider demo view to manage Patients.",
-    });
+export const superAdminProcedure = protectedProcedure.use(({ ctx, next }) => {
+  if (ctx.user.role !== "super_admin") {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Access restricted to Super Admin." });
   }
 
   return next({
-    ctx: {
-      ...ctx,
-      user: ctx.user,
-    },
+    ctx,
   });
 });
+

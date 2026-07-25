@@ -16,9 +16,14 @@ export const trpcClient = trpc.createClient({
   links: [
     httpBatchLink({
       url: import.meta.env.VITE_API_URL ?? "http://localhost:3001/trpc",
-      headers: () => ({
-        "x-demo-role": getDemoRole(),
-      }),
+      headers: () => {
+        const token = localStorage.getItem("naadi_jwt_token");
+        return {
+          "x-demo-role": getDemoRole(),
+          ...(token ? { authorization: `Bearer ${token}` } : {}),
+        };
+      },
     }),
   ],
 });
+
