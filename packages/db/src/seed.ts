@@ -46,7 +46,7 @@ async function seed() {
     .values({
       id: DEMO_PATIENT_ID,
       name: "Rajan Menon",
-      age: 55,
+      age: "55",
       phone: "+91 98765 43210",
       language: "en",
       caregiverContact: { name: "Maya Menon", phone: "+91 98765 43211" },
@@ -55,7 +55,7 @@ async function seed() {
       target: patient.id,
       set: {
         name: "Rajan Menon",
-        age: 55,
+        age: "55",
         phone: "+91 98765 43210",
         language: "en",
         caregiverContact: { name: "Maya Menon", phone: "+91 98765 43211" },
