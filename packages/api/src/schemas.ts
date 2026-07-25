@@ -75,7 +75,7 @@ export const carePlanIdSchema = z.object({ carePlanId: z.string().uuid() });
 
 export const patientCreateSchema = z.object({
   name: z.string().trim().min(1).max(160),
-  age: z.number().int().min(0).max(130).optional(),
+  age: z.string().trim().min(1).max(3).optional(),
   phone: z.string().trim().min(5).max(32).optional(),
   language: z.string().trim().min(2).max(12).default("en"),
   caregiverContact: z
