@@ -74,6 +74,7 @@ The product is a process-tracker with two human gates, not a document store.
 | **Time-to-review** | Median time from report upload → provider `REVIEWED` | Measures whether results get acted on |
 | **Care-gap visibility** | % of overdue/unreviewed actions surfaced on the dashboard (target: 100%) | No silent failures |
 | **Extraction quality** | Avg. provider edits per generated plan (lower is better) | AI usefulness without over-trust |
+| **Closed-loop reuse rate** | % of `CLOSED` loops whose stored history (§5.1) is opened/referenced during a later consultation or referral | Validates the "medical footprint" claim — stored history must actually get used by future providers, not just retained |
 
 ---
 
@@ -120,6 +121,20 @@ Medical instruction
 ```
 
 The two human gates (verify, review) are non-negotiable. They are also the trust story — the AI proposes, the human disposes, and a loop is only closed when both human and machine parts agree.
+
+### 5.1 Closed loops stay stored
+
+A `CLOSED` loop is not deleted or archived out of view — it remains stored as **searchable history** on the patient's journey. This is not a shift toward a full record database (§3 Non-Goals still holds); it is a direct consequence of the ordered timeline and `ActionEvent` audit trail the product already keeps (§6.3, §8.3).
+
+Concretely, the persisted history serves **future providers, not just the current one**. For any closed action, the timeline shows:
+
+- what was issued (the original instruction and its source text),
+- what was completed (and when),
+- what was reviewed (the provider's comment),
+- what the outcome was,
+- what the next instruction became (the spawned follow-up, if any).
+
+A referral or follow-up visit inherits this trail instead of starting blank — a future doctor sees not just that "medication was prescribed" but that it was taken, reviewed, and what happened next. This is what makes the Loop feel like a **medical footprint** rather than a one-time task list, without expanding the product into an EHR.
 
 ---
 
@@ -202,6 +217,18 @@ Each maps to a demo beat (§18) and a build owner (§16). Priority uses MoSCoW: 
 ### 7.3 Coordinator flow
 
 Overdue actions · reports awaiting review · open referrals · patients needing assistance — **served by the same provider account in the MVP** (no separate role this cycle).
+
+### 7.4 Reducing provider workload
+
+The two human gates (verify, review) are non-negotiable (§5), which means the provider's time is the real constraint on how many patients the Loop can carry. The UI is responsible for making each gate fast, not for removing it:
+
+- **Quick-review cards** — each extracted action (verify gate) and each report (review gate) renders as a compact, scannable card, not a form: type, instructions, due date, and source/comment visible without a click-through.
+- **Default due dates** — the AI extraction pre-fills a sensible due date per action type so the provider's default motion is *confirm*, not *compute*.
+- **One-click approve/edit** — approving an action or a reviewed report is a single action; editing only opens the fields that need to change, not the whole card.
+- **Batch review queue** — the dashboard's Awaiting Review section supports reviewing multiple reports in one pass rather than one modal at a time.
+- **Coordinator mode** — the same provider account (§7.3) can switch into a coordinator-focused view: overdue actions, open reports, and incomplete referrals surfaced first, ahead of new extractions, so triage-style work doesn't get buried under plan creation.
+
+None of this weakens the gate — it only removes friction between "the provider decided" and "the system recorded it."
 
 ---
 

@@ -1,4 +1,5 @@
 import { createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
+import { z } from "zod";
 import { AppShell } from "./components/app-shell";
 import { LandingPage } from "./routes";
 import { AdminApprovalsPage } from "./routes/admin/approvals";
@@ -47,6 +48,10 @@ const providerDocumentRoute = createRoute({
 const providerVerifyRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/provider/patients/$patientId/verify",
+  validateSearch: z.object({
+    carePlanId: z.string().uuid().optional(),
+    manual: z.coerce.boolean().optional().default(false),
+  }),
   component: ProviderVerifyPage,
 });
 

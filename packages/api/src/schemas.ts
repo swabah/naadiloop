@@ -73,24 +73,98 @@ export const patientIdSchema = z.object({ patientId: z.string().uuid() });
 export const actionIdSchema = z.object({ actionId: z.string().uuid() });
 export const carePlanIdSchema = z.object({ carePlanId: z.string().uuid() });
 
-export const patientCreateSchema = z.object({
-  name: z.string().trim().min(1).max(160),
-  age: z.string().trim().min(1).max(3).optional(),
-  phone: z.string().trim().min(5).max(32).optional(),
-  language: z.string().trim().min(2).max(12).default("en"),
-  caregiverContact: z
-    .object({
-      name: z.string().trim().min(1).max(160).optional(),
-      phone: z.string().trim().min(5).max(32).optional(),
-    })
-    .optional(),
-});
+const optionalText = (schema: z.ZodString) =>
+  z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    schema.optional(),
+  );
+
+const optionalPhoneSchema = optionalText(
+  z
+    .string()
+    .trim()
+    .min(5, "Phone number must have at least 5 characters.")
+    .max(32, "Phone number must have 32 characters or fewer."),
+);
+
+const optionalAgeSchema = optionalText(
+  z
+    .string()
+    .trim()
+    .regex(/^\d{1,3}$/, "Age must be a whole number.")
+    .refine(
+      (value) => !/^\d{1,3}$/.test(value) || Number(value) <= 130,
+      "Age must be 130 or less.",
+    ),
+);
+
+export const patientCreateSchema = z
+  .object({
+    name: z
+      .string()
+      .trim()
+      .min(1, "Patient name is required.")
+      .max(160, "Patient name must have 160 characters or fewer."),
+    age: optionalAgeSchema,
+    phone: optionalPhoneSchema,
+    language: z.enum(["en", "ml", "hi"]).default("en"),
+    caregiverContact: z
+      .object({
+        name: optionalText(
+          z.string().trim().max(160, "Caregiver name must have 160 characters or fewer."),
+        ),
+        phone: optionalPhoneSchema,
+      })
+      .optional(),
+  })
+  .transform((patient) => {
+    const caregiverContact =
+      patient.caregiverContact?.name || patient.caregiverContact?.phone
+        ? patient.caregiverContact
+        : undefined;
+
+    return { ...patient, caregiverContact };
+  });
 
 export const documentInputSchema = z.object({
   patientId: z.string().uuid(),
   type: documentTypeSchema,
   content: z.string().trim().min(1).max(100_000),
 });
+
+export const documentExtractionResultSchema = z.object({
+  document: z.object({
+    id: z.string().uuid(),
+    patientId: z.string().uuid(),
+    documentType: documentTypeSchema,
+    content: z.string(),
+    uploadedAt: z.string().datetime({ offset: true }),
+  }),
+  patient: z.object({
+    id: z.string().uuid(),
+    name: z.string(),
+  }),
+  carePlan: z.object({
+    id: z.string().uuid(),
+    patientId: z.string().uuid(),
+    providerId: z.string().uuid(),
+    status: z.literal("draft"),
+    createdAt: z.string().datetime({ offset: true }),
+  }),
+  actions: z.array(
+    careActionSchema.and(
+      z.object({
+        id: z.string().uuid(),
+        carePlanId: z.string().uuid(),
+        status: z.literal("PENDING"),
+        verified: z.literal(false),
+        createdAt: z.string().datetime({ offset: true }),
+      }),
+    ),
+  ),
+});
+
+export type DocumentExtractionResult = z.infer<typeof documentExtractionResultSchema>;
 
 export const completeActionSchema = z.object({
   actionId: z.string().uuid(),

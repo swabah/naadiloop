@@ -31,6 +31,15 @@ const demoUsers: Record<"provider" | "patient", AuthedUser> = {
   },
 };
 
+export function getDemoUserByRole(role: DemoRole): AuthedUser {
+  return demoUsers[role];
+}
+
+export function getDemoUserByEmail(email: string): AuthedUser | null {
+  const normalizedEmail = email.trim().toLowerCase();
+  return Object.values(demoUsers).find((user) => user.email === normalizedEmail) ?? null;
+}
+
 export function createContext({ req }: FetchCreateContextFnOptions) {
   let user: AuthedUser | null = null;
 

@@ -4,13 +4,15 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./schemas": "./src/schemas.ts"
   },
   "scripts": {
     "build": "tsc --noEmit",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@naadi/ai": "workspace:*",
     "@naadi/db": "workspace:*",
     "@trpc/server": "^11.5.0",
     "bcryptjs": "^3.0.2",
