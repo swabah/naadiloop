@@ -21,7 +21,7 @@ In practice, a team of four can still work in parallel — see `workflow.md §5`
 |---|---|---|---|---|
 | 001 | Project Scaffold, Stack Wiring & Data Contracts | — (foundational) | §7, §8, §9, §10, §11, §12, §13, §15, §16 | Done |
 | 002 | Codebase & Spec Audit: TradeRoute Contamination Check | 001 | — (process/integrity issue) | Done |
-| 003 | Patient Management & Provider Shell | 002 | §4, §6.1 (US-1), §11 | — |
+| 003 | Patient Management & Provider Shell | 002 | §4, §6.1 (US-1), §11 | Done |
 | 004 | Document Input & AI Extraction | 003 | §6.1 (US-2/US-3), §9, §11, §12.2 | — |
 | 005 | Verify Care Plan & Activation (human gate #1) | 004 | §6.2 (US-4/US-5), §8.2, §11 | — |
 | 006 | Patient Journey — Next Action & Timeline | 005 | §6.3 (US-6/US-7/US-8), §7.2, §11 | — |

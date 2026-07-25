@@ -27,6 +27,15 @@ const demoUsers: Record<DemoRole, AuthedUser> = {
   },
 };
 
+export function getDemoUserByRole(role: DemoRole): AuthedUser {
+  return demoUsers[role];
+}
+
+export function getDemoUserByEmail(email: string): AuthedUser | null {
+  const normalizedEmail = email.trim().toLowerCase();
+  return Object.values(demoUsers).find((user) => user.email === normalizedEmail) ?? null;
+}
+
 export function createContext({ req }: FetchCreateContextFnOptions) {
   const roleHeader = req.headers.get("x-demo-role");
   const role: DemoRole | null =
@@ -34,7 +43,7 @@ export function createContext({ req }: FetchCreateContextFnOptions) {
 
   return {
     db: getDb(),
-    user: role ? demoUsers[role] : null,
+    user: role ? getDemoUserByRole(role) : null,
   };
 }
 
