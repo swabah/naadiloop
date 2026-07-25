@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url";
-import { config } from "dotenv";
 import bcrypt from "bcryptjs";
+import { config } from "dotenv";
 import { getDb, initializeDatabaseSchema } from "./client";
 import {
   actionEvents,
@@ -180,7 +180,7 @@ async function seed() {
         patientId: DEMO_PATIENT_ID,
         providerId: DEMO_PROVIDER_ID,
         sourceDocumentId: ids.document,
-        status: "verified",
+        status: "active",
         verifiedAt: now,
       },
       {
@@ -193,7 +193,7 @@ async function seed() {
     ])
     .onConflictDoUpdate({
       target: carePlans.id,
-      set: { sourceDocumentId: ids.document },
+      set: { status: "active", verifiedAt: now, sourceDocumentId: ids.document },
     });
 
   await db

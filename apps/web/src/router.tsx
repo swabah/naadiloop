@@ -4,7 +4,6 @@ import { AppShell } from "./components/app-shell";
 import { LandingPage } from "./routes";
 import { AdminApprovalsPage } from "./routes/admin/approvals";
 import { LoginPage } from "./routes/login";
-import { RegisterPage } from "./routes/register";
 import { PatientActionPage } from "./routes/patient/action";
 import { PatientHelpPage } from "./routes/patient/help";
 import { PatientJourneyPage } from "./routes/patient/journey";
@@ -15,7 +14,7 @@ import { ProviderDocumentPage } from "./routes/provider/document";
 import { ProviderPatientsPage } from "./routes/provider/patients";
 import { ProviderReportPage } from "./routes/provider/report";
 import { ProviderVerifyPage } from "./routes/provider/verify";
-
+import { RegisterPage } from "./routes/register";
 
 const rootRoute = createRootRoute({
   component: AppShell,
@@ -94,6 +93,9 @@ const patientReportRoute = createRoute({
 const patientHelpRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/patient/help",
+  validateSearch: z.object({
+    actionId: z.string().uuid().optional(),
+  }),
   component: PatientHelpPage,
 });
 
@@ -131,7 +133,6 @@ const routeTree = rootRoute.addChildren([
   patientReportRoute,
   patientHelpRoute,
 ]);
-
 
 export const router = createRouter({ routeTree });
 

@@ -1,6 +1,15 @@
-import React from "react";
 import { Link } from "@tanstack/react-router";
-import { Building, Building2, CheckCircle, Clock, MapPin, ShieldAlert, ShieldCheck, User, XCircle } from "lucide-react";
+import {
+  Building,
+  Building2,
+  CheckCircle,
+  Clock,
+  MapPin,
+  ShieldAlert,
+  ShieldCheck,
+  User,
+  XCircle,
+} from "lucide-react";
 import { useAuth } from "../../lib/auth-context";
 import { trpc } from "../../lib/trpc";
 
@@ -132,7 +141,8 @@ export function AdminApprovalsPage() {
                     <div className="flex items-center gap-2">
                       <User className="w-4 h-4 text-muted shrink-0" />
                       <span>
-                        <span className="font-semibold text-gray-900">Admin:</span> {item.name} ({item.email})
+                        <span className="font-semibold text-gray-900">Admin:</span> {item.name} (
+                        {item.email})
                       </span>
                     </div>
 

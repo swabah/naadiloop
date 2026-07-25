@@ -15,7 +15,6 @@ app.use(
   }),
 );
 
-
 app.get("/health", (context) =>
   context.json({
     service: "naadi-loop-server",

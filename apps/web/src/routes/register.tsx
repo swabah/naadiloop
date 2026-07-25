@@ -1,13 +1,14 @@
-import React, { useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Building2, CheckCircle2, Clock, ShieldCheck, User, UserCheck } from "lucide-react";
+import type React from "react";
+import { useState } from "react";
 import { trpc } from "../lib/trpc";
 
 type RegisterRoleTab = "patient" | "admin";
 type AdminSubRole = "hospital_admin" | "pharmacy_admin";
 
 export function RegisterPage() {
-  const navigate = useNavigate();
+  const _navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<RegisterRoleTab>("patient");
   const [adminRole, setAdminRole] = useState<AdminSubRole>("hospital_admin");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -60,7 +61,9 @@ export function RegisterPage() {
       }
     } else {
       if (!orgName.trim() || !licenseNumber.trim()) {
-        setErrorMessage("Organization name and license number are required for administration registration.");
+        setErrorMessage(
+          "Organization name and license number are required for administration registration.",
+        );
         return;
       }
     }
@@ -97,9 +100,12 @@ export function RegisterPage() {
         <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-primary/10 text-primary mb-3">
           <ShieldCheck className="w-6 h-6" />
         </div>
-        <h1 className="text-3xl font-extrabold text-primary-ink font-display">Create Your Account</h1>
+        <h1 className="text-3xl font-extrabold text-primary-ink font-display">
+          Create Your Account
+        </h1>
         <p className="mt-2 text-sm text-muted">
-          Register as a Patient for instant care access or as an Administration user (Hospital/Pharmacy) pending Super Admin approval.
+          Register as a Patient for instant care access or as an Administration user
+          (Hospital/Pharmacy) pending Super Admin approval.
         </p>
       </div>
 
@@ -176,14 +182,17 @@ export function RegisterPage() {
             <div className="mb-6 rounded-lg bg-teal-50 border border-teal-200 p-3.5 flex items-start gap-3">
               <UserCheck className="w-5 h-5 text-teal-700 mt-0.5 shrink-0" />
               <div className="text-xs text-teal-800 leading-relaxed">
-                <span className="font-bold">Instant Activation:</span> Patient accounts require a 12-digit Aadhaar number for unique verification and are auto-approved instantly.
+                <span className="font-bold">Instant Activation:</span> Patient accounts require a
+                12-digit Aadhaar number for unique verification and are auto-approved instantly.
               </div>
             </div>
           ) : (
             <div className="mb-6 rounded-lg bg-amber-50 border border-amber-200 p-3.5 flex items-start gap-3">
               <Clock className="w-5 h-5 text-amber-700 mt-0.5 shrink-0" />
               <div className="text-xs text-amber-800 leading-relaxed">
-                <span className="font-bold">Super Admin Approval Required:</span> Hospital and Pharmacy administration accounts undergo manual verification before login access is granted.
+                <span className="font-bold">Super Admin Approval Required:</span> Hospital and
+                Pharmacy administration accounts undergo manual verification before login access is
+                granted.
               </div>
             </div>
           )}
@@ -199,10 +208,14 @@ export function RegisterPage() {
             {/* Common Inputs */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1">
+                <label
+                  htmlFor="register-name"
+                  className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1"
+                >
                   Full Name <span className="text-red-500">*</span>
                 </label>
                 <input
+                  id="register-name"
                   type="text"
                   required
                   placeholder="e.g. Rajan Menon"
@@ -213,10 +226,14 @@ export function RegisterPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1">
+                <label
+                  htmlFor="register-email"
+                  className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1"
+                >
                   Email Address <span className="text-red-500">*</span>
                 </label>
                 <input
+                  id="register-email"
                   type="email"
                   required
                   placeholder="user@example.com"
@@ -229,10 +246,14 @@ export function RegisterPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1">
+                <label
+                  htmlFor="register-password"
+                  className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1"
+                >
                   Password <span className="text-red-500">*</span>
                 </label>
                 <input
+                  id="register-password"
                   type="password"
                   required
                   minLength={6}
@@ -244,10 +265,14 @@ export function RegisterPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1">
+                <label
+                  htmlFor="register-phone"
+                  className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1"
+                >
                   Phone Number
                 </label>
                 <input
+                  id="register-phone"
                   type="tel"
                   placeholder="+91 98765 43210"
                   value={phone}
@@ -263,10 +288,14 @@ export function RegisterPage() {
                 <hr className="my-4 border-gray-100" />
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1">
+                    <label
+                      htmlFor="register-aadhaar"
+                      className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1"
+                    >
                       Aadhaar Number (12 Digits) <span className="text-red-500">*</span>
                     </label>
                     <input
+                      id="register-aadhaar"
                       type="text"
                       required
                       placeholder="1234 5678 9012"
@@ -281,10 +310,14 @@ export function RegisterPage() {
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1">
+                      <label
+                        htmlFor="register-age"
+                        className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1"
+                      >
                         Age
                       </label>
                       <input
+                        id="register-age"
                         type="text"
                         placeholder="55"
                         value={age}
@@ -293,10 +326,14 @@ export function RegisterPage() {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1">
+                      <label
+                        htmlFor="register-gender"
+                        className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1"
+                      >
                         Gender
                       </label>
                       <select
+                        id="register-gender"
                         value={gender}
                         onChange={(e) => setGender(e.target.value)}
                         className="w-full rounded-lg border border-gray-300 px-3.5 py-2 text-sm focus:border-primary focus:outline-none"
@@ -307,10 +344,14 @@ export function RegisterPage() {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1">
+                      <label
+                        htmlFor="register-language"
+                        className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1"
+                      >
                         Language
                       </label>
                       <select
+                        id="register-language"
                         value={language}
                         onChange={(e) => setLanguage(e.target.value)}
                         className="w-full rounded-lg border border-gray-300 px-3.5 py-2 text-sm focus:border-primary focus:outline-none"
@@ -332,9 +373,9 @@ export function RegisterPage() {
                 <div className="space-y-4">
                   {/* Admin Role Picker */}
                   <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-muted mb-2">
+                    <p className="block text-xs font-semibold uppercase tracking-wider text-muted mb-2">
                       Administration Role Type <span className="text-red-500">*</span>
-                    </label>
+                    </p>
                     <div className="grid grid-cols-2 gap-3">
                       <label
                         className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
@@ -382,10 +423,14 @@ export function RegisterPage() {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1">
+                      <label
+                        htmlFor="register-org-name"
+                        className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1"
+                      >
                         Facility / Organization Name <span className="text-red-500">*</span>
                       </label>
                       <input
+                        id="register-org-name"
                         type="text"
                         required
                         placeholder={
@@ -400,10 +445,14 @@ export function RegisterPage() {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1">
+                      <label
+                        htmlFor="register-license"
+                        className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1"
+                      >
                         License / Registration Number <span className="text-red-500">*</span>
                       </label>
                       <input
+                        id="register-license"
                         type="text"
                         required
                         placeholder="e.g. HOSP-998812 / PHARM-3321"
@@ -415,10 +464,14 @@ export function RegisterPage() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1">
+                    <label
+                      htmlFor="register-address"
+                      className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1"
+                    >
                       Street Address
                     </label>
                     <input
+                      id="register-address"
                       type="text"
                       placeholder="123 Health Avenue, MG Road"
                       value={address}
@@ -429,10 +482,14 @@ export function RegisterPage() {
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1">
+                      <label
+                        htmlFor="register-city"
+                        className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1"
+                      >
                         City
                       </label>
                       <input
+                        id="register-city"
                         type="text"
                         placeholder="Kochi"
                         value={city}
@@ -441,10 +498,14 @@ export function RegisterPage() {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1">
+                      <label
+                        htmlFor="register-state"
+                        className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1"
+                      >
                         State
                       </label>
                       <input
+                        id="register-state"
                         type="text"
                         placeholder="Kerala"
                         value={state}
@@ -453,10 +514,14 @@ export function RegisterPage() {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1">
+                      <label
+                        htmlFor="register-pincode"
+                        className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1"
+                      >
                         Pincode
                       </label>
                       <input
+                        id="register-pincode"
                         type="text"
                         placeholder="682001"
                         value={pincode}

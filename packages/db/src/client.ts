@@ -1,17 +1,19 @@
 import { PGlite } from "@electric-sql/pglite";
 import { neon } from "@neondatabase/serverless";
 import { sql } from "drizzle-orm";
-import { drizzle as drizzleNeon } from "drizzle-orm/neon-http";
+import { drizzle as drizzleNeon, type NeonHttpDatabase } from "drizzle-orm/neon-http";
 import { drizzle as drizzlePg } from "drizzle-orm/node-postgres";
 import { drizzle as drizzlePglite } from "drizzle-orm/pglite";
 import pg from "pg";
 import * as schema from "./schema";
 
-let database: any = undefined;
-let pgliteInstance: PGlite | undefined = undefined;
+type Database = NeonHttpDatabase<typeof schema>;
+
+let database: Database | undefined;
+let pgliteInstance: PGlite | undefined;
 let isInitialized = false;
 
-export async function initializeDatabaseSchema(db: any) {
+export async function initializeDatabaseSchema(db: Database) {
   if (isInitialized) return;
 
   try {
@@ -66,8 +68,11 @@ export async function initializeDatabaseSchema(db: any) {
 
     await db.execute(sql`
       DO $$ BEGIN
-        CREATE TYPE event_type AS ENUM ('created', 'verified', 'activated', 'completed', 'skipped', 'help_requested', 'review_started', 'reviewed', 'closed', 'follow_up_created');
+        CREATE TYPE event_type AS ENUM ('created', 'verified', 'activated', 'completed', 'skipped', 'reminder_requested', 'help_requested', 'review_started', 'reviewed', 'closed', 'follow_up_created');
       EXCEPTION WHEN duplicate_object THEN null; END $$;
+    `);
+    await db.execute(sql`
+      ALTER TYPE event_type ADD VALUE IF NOT EXISTS 'reminder_requested';
     `);
 
     // 2. Create Tables
@@ -147,6 +152,8 @@ export async function initializeDatabaseSchema(db: any) {
         assigned_to TEXT NOT NULL DEFAULT 'patient',
         review_required BOOLEAN NOT NULL DEFAULT FALSE,
         verified BOOLEAN NOT NULL DEFAULT FALSE,
+        next_step_communicated BOOLEAN NOT NULL DEFAULT FALSE,
+        parent_action_id UUID REFERENCES care_actions(id),
         payload JSONB NOT NULL DEFAULT '{}'::jsonb,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
@@ -155,13 +162,24 @@ export async function initializeDatabaseSchema(db: any) {
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS reports (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        care_action_id UUID NOT NULL REFERENCES care_actions(id),
+        care_action_id UUID REFERENCES care_actions(id),
+        patient_id UUID REFERENCES patients(id),
         file_url TEXT NOT NULL,
         status report_status NOT NULL DEFAULT 'AWAITING_REVIEW',
         provider_comment TEXT,
         uploaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         reviewed_at TIMESTAMPTZ
       );
+    `);
+    await db.execute(sql`
+      ALTER TABLE care_actions
+        ADD COLUMN IF NOT EXISTS next_step_communicated BOOLEAN NOT NULL DEFAULT FALSE,
+        ADD COLUMN IF NOT EXISTS parent_action_id UUID REFERENCES care_actions(id);
+    `);
+    await db.execute(sql`
+      ALTER TABLE action_events
+        ALTER COLUMN care_action_id DROP NOT NULL,
+        ADD COLUMN IF NOT EXISTS patient_id UUID REFERENCES patients(id);
     `);
 
     await db.execute(sql`
@@ -196,11 +214,11 @@ export function getDb(databaseUrl = process.env.DATABASE_URL) {
     !databaseUrl.includes("127.0.0.1")
   ) {
     const pool = new pg.Pool({ connectionString: databaseUrl });
-    database = drizzlePg(pool, { schema });
+    database = drizzlePg(pool, { schema }) as unknown as Database;
   } else {
     // Embedded PGlite Postgres instance storing data in ./pgdata directory inside workspace
     pgliteInstance ??= new PGlite("./pgdata");
-    database = drizzlePglite({ client: pgliteInstance, schema });
+    database = drizzlePglite({ client: pgliteInstance, schema }) as unknown as Database;
   }
 
   initializeDatabaseSchema(database);

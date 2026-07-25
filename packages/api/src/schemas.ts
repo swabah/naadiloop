@@ -168,15 +168,20 @@ export type DocumentExtractionResult = z.infer<typeof documentExtractionResultSc
 
 export const completeActionSchema = z.object({
   actionId: z.string().uuid(),
-  outcome: z.enum(["taken", "skipped", "help"]),
+  outcome: z.enum(["completed", "taken", "skipped", "remind", "help"]),
   notes: z.string().trim().max(1_000).optional(),
 });
 
-export const helpRequestSchema = z.object({
-  actionId: z.string().uuid(),
-  kind: z.enum(["caregiver", "transport", "understanding", "provider"]),
-  notes: z.string().trim().max(1_000).optional(),
-});
+export const helpRequestSchema = z
+  .object({
+    actionId: z.string().uuid().optional(),
+    patientId: z.string().uuid().optional(),
+    kind: z.enum(["caregiver", "transport", "understanding", "provider"]),
+    notes: z.string().trim().max(1_000).optional(),
+  })
+  .refine((input) => input.actionId || input.patientId, {
+    message: "Choose a Care action or Patient for this help request.",
+  });
 
 export const uploadReportSchema = z.object({
   actionId: z.string().uuid(),
@@ -200,49 +205,57 @@ export const careGapListSchema = z
   })
   .optional();
 
-export const userRoleSchema = z.enum(["patient", "hospital_admin", "pharmacy_admin", "super_admin"]);
+export const userRoleSchema = z.enum([
+  "patient",
+  "hospital_admin",
+  "pharmacy_admin",
+  "super_admin",
+]);
 
-export const registerInputSchema = z.object({
-  name: z.string().trim().min(1, "Name is required").max(160),
-  email: z.string().trim().email("Invalid email address"),
-  password: z.string().min(6, "Password must be at least 6 characters"),
-  phone: z.string().trim().optional(),
-  role: z.enum(["patient", "hospital_admin", "pharmacy_admin"]),
-  // Patient specific
-  aadhaarNumber: z.string().trim().optional(),
-  age: z.string().trim().optional(),
-  gender: z.string().trim().optional(),
-  language: z.string().trim().default("en"),
-  // Organization specific (Hospital / Pharmacy)
-  orgName: z.string().trim().optional(),
-  licenseNumber: z.string().trim().optional(),
-  address: z.string().trim().optional(),
-  city: z.string().trim().optional(),
-  state: z.string().trim().optional(),
-  pincode: z.string().trim().optional(),
-}).refine(
-  (data) => {
-    if (data.role === "patient") {
-      return !!data.aadhaarNumber && /^\d{12}$/.test(data.aadhaarNumber.replace(/\s+/g, ""));
-    }
-    return true;
-  },
-  {
-    message: "12-digit Aadhaar number is required for patient registration",
-    path: ["aadhaarNumber"],
-  }
-).refine(
-  (data) => {
-    if (data.role === "hospital_admin" || data.role === "pharmacy_admin") {
-      return !!data.orgName && !!data.licenseNumber;
-    }
-    return true;
-  },
-  {
-    message: "Organization name and license number are required for administration registration",
-    path: ["orgName"],
-  }
-);
+export const registerInputSchema = z
+  .object({
+    name: z.string().trim().min(1, "Name is required").max(160),
+    email: z.string().trim().email("Invalid email address"),
+    password: z.string().min(6, "Password must be at least 6 characters"),
+    phone: z.string().trim().optional(),
+    role: z.enum(["patient", "hospital_admin", "pharmacy_admin"]),
+    // Patient specific
+    aadhaarNumber: z.string().trim().optional(),
+    age: z.string().trim().optional(),
+    gender: z.string().trim().optional(),
+    language: z.string().trim().default("en"),
+    // Organization specific (Hospital / Pharmacy)
+    orgName: z.string().trim().optional(),
+    licenseNumber: z.string().trim().optional(),
+    address: z.string().trim().optional(),
+    city: z.string().trim().optional(),
+    state: z.string().trim().optional(),
+    pincode: z.string().trim().optional(),
+  })
+  .refine(
+    (data) => {
+      if (data.role === "patient") {
+        return !!data.aadhaarNumber && /^\d{12}$/.test(data.aadhaarNumber.replace(/\s+/g, ""));
+      }
+      return true;
+    },
+    {
+      message: "12-digit Aadhaar number is required for patient registration",
+      path: ["aadhaarNumber"],
+    },
+  )
+  .refine(
+    (data) => {
+      if (data.role === "hospital_admin" || data.role === "pharmacy_admin") {
+        return !!data.orgName && !!data.licenseNumber;
+      }
+      return true;
+    },
+    {
+      message: "Organization name and license number are required for administration registration",
+      path: ["orgName"],
+    },
+  );
 
 export const loginInputSchema = z.object({
   email: z.string().trim().email("Invalid email address"),
@@ -253,4 +266,3 @@ export const adminApprovalSchema = z.object({
   userId: z.string().uuid("Invalid user ID"),
   action: z.enum(["approve", "reject"]),
 });
-

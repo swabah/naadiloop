@@ -1,7 +1,5 @@
 import { Link, Outlet } from "@tanstack/react-router";
 import {
-  Bell,
-  Building2,
   ClipboardList,
   HeartPulse,
   LayoutDashboard,

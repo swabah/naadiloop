@@ -1,9 +1,8 @@
-import jwt from "jsonwebtoken";
 import { getDb } from "@naadi/db";
 import type { FetchCreateContextFnOptions } from "@trpc/server/adapters/fetch";
+import jwt from "jsonwebtoken";
 
 export type UserRole = "patient" | "hospital_admin" | "pharmacy_admin" | "super_admin" | "provider";
-
 
 
 export interface AuthedUser {
@@ -19,16 +18,17 @@ const JWT_SECRET = process.env.JWT_SECRET || "super-secret-naadi-jwt-key-2026";
 
 
 
+
 export function createContext({ req }: FetchCreateContextFnOptions) {
   let user: AuthedUser | null = null;
 
   // 1. Try JWT Authorization header
   const authHeader = req.headers.get("authorization");
-  if (authHeader && authHeader.startsWith("Bearer ")) {
+  if (authHeader?.startsWith("Bearer ")) {
     const token = authHeader.slice(7).trim();
     try {
       const decoded = jwt.verify(token, JWT_SECRET) as AuthedUser;
-      if (decoded && decoded.id) {
+      if (decoded?.id) {
         user = {
           id: decoded.id,
           name: decoded.name,
@@ -51,4 +51,3 @@ export function createContext({ req }: FetchCreateContextFnOptions) {
 }
 
 export type Context = ReturnType<typeof createContext>;
-

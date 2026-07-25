@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { AlertCircle, Clock, KeyRound, LogIn } from "lucide-react";
+import type React from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "../lib/auth-context";
 import { trpc } from "../lib/trpc";
 
@@ -83,9 +84,13 @@ export function LoginPage() {
             <div className="flex items-start gap-3">
               <Clock className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
               <div>
-                <h3 className="text-sm font-bold text-amber-900">Account Pending Super Admin Approval</h3>
+                <h3 className="text-sm font-bold text-amber-900">
+                  Account Pending Super Admin Approval
+                </h3>
                 <p className="mt-1 text-xs text-amber-800 leading-relaxed">
-                  Your registration application for a Hospital or Pharmacy administration account has been received and is waiting for Super Admin review. You will be able to sign in once approved.
+                  Your registration application for a Hospital or Pharmacy administration account
+                  has been received and is waiting for Super Admin review. You will be able to sign
+                  in once approved.
                 </p>
               </div>
             </div>
@@ -99,10 +104,14 @@ export function LoginPage() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1">
+            <label
+              htmlFor="login-email"
+              className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1"
+            >
               Email Address
             </label>
             <input
+              id="login-email"
               type="email"
               required
               placeholder="user@example.com"
@@ -113,10 +122,14 @@ export function LoginPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1">
+            <label
+              htmlFor="login-password"
+              className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1"
+            >
               Password
             </label>
             <input
+              id="login-password"
               type="password"
               required
               placeholder="••••••••"
