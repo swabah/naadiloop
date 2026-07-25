@@ -1,0 +1,27 @@
+{
+  "name": "@naadi/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema.ts"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "db:push": "drizzle-kit push --force",
+    "db:seed": "tsx src/seed.ts"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^1.0.1",
+    "drizzle-orm": "^0.44.5"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "dotenv": "^17.2.1",
+    "drizzle-kit": "^0.31.4",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2"
+  }
+}

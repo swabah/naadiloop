@@ -47,3 +47,25 @@ _Avoid_: Access log, activity log, history log (pick Audit Log as canonical acro
 **Time-boxed**:
 Describes a Consent whose access rights lapse automatically at `expiresAt` without requiring an explicit revoke action. An expired Consent is handled identically to no Consent at all.
 _Avoid_: Expiring, temporary
+
+## Naadi Loop
+
+**Care action**:
+A single trackable instruction in a Care plan: a medicine, test, referral, or follow-up. It carries its provider-verified instructions, provenance, due date, and lifecycle status.
+_Avoid_: Task, reminder, record
+
+**Care plan**:
+The provider-verified set of Care actions generated from one Source Document for one Patient. A draft or merely extracted plan is never patient-visible; it must be explicitly activated.
+_Avoid_: Treatment plan (broader clinical meaning), checklist
+
+**Loop closure**:
+The point at which a Care action is completed, reviewed when required, and its next step has been communicated. Completion alone does not close a review-bearing action.
+_Avoid_: Done, resolved
+
+**Care gap**:
+A deterministic operational signal that a care journey may have stalled, such as an overdue action, an unreviewed report, or a Patient request for help. It is not a diagnosis or medical prediction.
+_Avoid_: Risk score, clinical alert
+
+**Human gate**:
+A mandatory Provider decision that AI cannot bypass. Naadi Loop has two: verification before a Care plan becomes patient-visible and review before a result-bearing action can close.
+_Avoid_: Approval step, AI validation

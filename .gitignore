@@ -1,2 +1,20 @@
 PRD.md
 issues/
+
+# Dependencies and build output
+node_modules/
+dist/
+.vite/
+*.tsbuildinfo
+
+# Local environment and Neon project metadata
+.env
+.env.*
+!.env.example
+.neon/
+
+# Editor and operating-system files
+.DS_Store
+.idea/
+.vscode/
+.neon

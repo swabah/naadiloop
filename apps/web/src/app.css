@@ -1,0 +1,53 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #0f766e;
+  --color-primary-ink: #0b3a34;
+  --color-primary-soft: #e2f2ef;
+  --color-accent: #f59e0b;
+  --color-gate: #7c3aed;
+  --color-success: #10b981;
+  --color-success-ink: #047857;
+  --color-warning: #ea580c;
+  --color-bg: #f6f8f7;
+  --color-surface: #ffffff;
+  --color-text: #1c1917;
+  --color-muted: #6f7774;
+  --color-border: #dfe7e4;
+  --font-sans: "Inter", "Avenir Next", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Fraunces", "Iowan Old Style", Georgia, serif;
+  --shadow-card: 0 24px 70px -38px rgba(11, 58, 52, 0.35);
+  --background-image-hero-glow:
+    radial-gradient(circle at 15% 0%, rgba(167, 190, 255, 0.32), transparent 42%),
+    radial-gradient(circle at 85% 5%, rgba(15, 118, 110, 0.16), transparent 35%);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  html {
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-family: var(--font-sans);
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    margin: 0;
+    min-width: 320px;
+    min-height: 100vh;
+    background:
+      linear-gradient(rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0.28)), var(--color-bg);
+  }
+
+  button,
+  a {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  ::selection {
+    background: rgba(15, 118, 110, 0.2);
+  }
+}
