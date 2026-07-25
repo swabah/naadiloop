@@ -1,16 +1,29 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { AlertCircle, Clock, KeyRound, LogIn } from "lucide-react";
+import { AlertCircle, Building2, Clock, KeyRound, LogIn, ShieldCheck, UserCheck } from "lucide-react";
 import { useAuth } from "../lib/auth-context";
 import { trpc } from "../lib/trpc";
 
 export function LoginPage() {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { user, isAuthenticated, login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isPendingApproval, setIsPendingApproval] = useState(false);
+
+  // Auto-redirect if already logged in
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      if (user.role === "patient") {
+        navigate({ to: "/patient/next" });
+      } else if (user.role === "super_admin") {
+        navigate({ to: "/admin/approvals" });
+      } else {
+        navigate({ to: "/provider/dashboard" });
+      }
+    }
+  }, [isAuthenticated, user, navigate]);
 
   const loginMutation = trpc.auth.login.useMutation({
     onSuccess: (data) => {
@@ -51,16 +64,62 @@ export function LoginPage() {
     loginMutation.mutate({ email, password });
   };
 
+  const handleQuickLogin = (demoEmail: string, demoPass: string) => {
+    setEmail(demoEmail);
+    setPassword(demoPass);
+    setErrorMessage(null);
+    setIsPendingApproval(false);
+    loginMutation.mutate({ email: demoEmail, password: demoPass });
+  };
+
   return (
-    <div className="mx-auto max-w-md py-14 px-4">
-      <div className="mb-8 text-center">
+    <div className="mx-auto max-w-md py-10 px-4">
+      <div className="mb-6 text-center">
         <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-primary/10 text-primary mb-3">
           <KeyRound className="w-6 h-6" />
         </div>
         <h1 className="text-3xl font-extrabold text-primary-ink font-display">Sign In</h1>
         <p className="mt-2 text-sm text-muted">
-          Access your care journey, provider dashboard, or administration portal.
+          Select a role or enter your credentials to access your portal.
         </p>
+      </div>
+
+      {/* Quick Demo Role Selector */}
+      <div className="mb-6 rounded-2xl border border-teal-100 bg-teal-50/60 p-4">
+        <div className="text-xs font-bold uppercase tracking-wider text-teal-800 mb-2.5 text-center">
+          Quick One-Tap Demo Sign In
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          <button
+            type="button"
+            onClick={() => handleQuickLogin("rajan@naadi.demo", "password123")}
+            className="flex flex-col items-center justify-center p-2.5 rounded-xl border border-teal-200 bg-white hover:bg-teal-100/50 text-teal-900 shadow-sm transition-all"
+          >
+            <UserCheck className="w-5 h-5 text-teal-600 mb-1" />
+            <span className="text-xs font-bold">Patient</span>
+            <span className="text-[10px] text-muted">Rajan</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleQuickLogin("anjali@naadi.demo", "password123")}
+            className="flex flex-col items-center justify-center p-2.5 rounded-xl border border-blue-200 bg-white hover:bg-blue-100/50 text-blue-900 shadow-sm transition-all"
+          >
+            <Building2 className="w-5 h-5 text-blue-600 mb-1" />
+            <span className="text-xs font-bold">Hospital Admin</span>
+            <span className="text-[10px] text-muted">Dr. Anjali</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleQuickLogin("superadmin@naadi.demo", "admin123")}
+            className="flex flex-col items-center justify-center p-2.5 rounded-xl border border-purple-200 bg-white hover:bg-purple-100/50 text-purple-900 shadow-sm transition-all"
+          >
+            <ShieldCheck className="w-5 h-5 text-purple-600 mb-1" />
+            <span className="text-xs font-bold">Super Admin</span>
+            <span className="text-[10px] text-muted">Approvals</span>
+          </button>
+        </div>
       </div>
 
       <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">

@@ -1,7 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { config } from "dotenv";
 import bcrypt from "bcryptjs";
-import { getDb } from "./client";
+import { getDb, initializeDatabaseSchema } from "./client";
 import {
   actionEvents,
   careActions,
@@ -45,6 +45,7 @@ const daysFromNow = (days: number) => {
 
 async function seed() {
   const db = getDb(process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL);
+  await initializeDatabaseSchema(db);
   const now = new Date();
 
   // Hash passwords

@@ -1,9 +1,9 @@
 import { TRPCError } from "@trpc/server";
 import bcrypt from "bcryptjs";
-import { eq } from "drizzle-orm";
 import jwt from "jsonwebtoken";
 import { z } from "zod";
-import { organizationDetails, patients, users } from "@naadi/db";
+import { eq, organizationDetails, patients, users } from "@naadi/db";
+
 import {
   actionIdSchema,
   adminApprovalSchema,
@@ -181,16 +181,15 @@ export const appRouter = router({
         where: eq(users.status, "pending_approval"),
       });
 
-      const userIds = pendingUsers.map((u) => u.id);
+      const userIds = pendingUsers.map((u: typeof users.$inferSelect) => u.id);
       const orgs = userIds.length > 0
-        ? await ctx.db.query.organizationDetails.findMany({
-            where: (org, { inArray }) => inArray(org.userId, userIds),
-          })
+        ? await ctx.db.query.organizationDetails.findMany()
         : [];
 
-      const orgMap = new Map(orgs.map((o) => [o.userId, o]));
+      const filteredOrgs = orgs.filter((o: typeof organizationDetails.$inferSelect) => userIds.includes(o.userId));
+      const orgMap = new Map(filteredOrgs.map((o: typeof organizationDetails.$inferSelect) => [o.userId, o]));
 
-      return pendingUsers.map((user) => ({
+      return pendingUsers.map((user: typeof users.$inferSelect) => ({
         id: user.id,
         name: user.name,
         email: user.email,
@@ -200,6 +199,7 @@ export const appRouter = router({
         createdAt: user.createdAt,
         organization: orgMap.get(user.id) || null,
       }));
+
     }),
 
     approveUser: superAdminProcedure.input(adminApprovalSchema).mutation(async ({ ctx, input }) => {
