@@ -11,7 +11,6 @@ import {
 } from "lucide-react";
 import { AuthProvider, useAuth } from "../lib/auth-context";
 import { BrandMark } from "./brand-mark";
-import { RoleToggle } from "./role-toggle";
 
 const navLinkClass =
   "flex items-center gap-2 rounded-full px-3 py-2 text-xs font-semibold text-muted transition hover:bg-white hover:text-text [&.active]:bg-white [&.active]:text-primary-ink [&.active]:shadow-sm";
@@ -73,7 +72,6 @@ function HeaderNav() {
               </Link>
             </div>
           )}
-          <RoleToggle />
         </div>
       </div>
       {isAuthenticated && user && (

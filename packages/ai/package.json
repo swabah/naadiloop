@@ -12,6 +12,7 @@
     "test": "node --import tsx --test src/extract.test.ts"
   },
   "dependencies": {
+    "@google/genai": "^2.13.0",
     "zod": "^4.1.5"
   },
   "devDependencies": {

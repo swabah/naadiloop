@@ -19,6 +19,9 @@ config({ path: fileURLToPath(new URL("../../../.env", import.meta.url)), quiet: 
 
 const SUPERADMIN_ID = "00000000-0000-4000-8000-000000000001";
 const PENDING_ADMIN_ID = "80000000-0000-4000-8000-000000000001";
+const SUPER_ADMIN_EMAIL =
+  process.env.SUPER_ADMIN_EMAIL?.trim().toLowerCase() || "superadmin@naadi.demo";
+const SUPER_ADMIN_PASSWORD = process.env.SUPER_ADMIN_PASSWORD || "admin123";
 
 const ids = {
   document: "30000000-0000-4000-8000-000000000001",
@@ -49,22 +52,40 @@ async function seed() {
   const now = new Date();
 
   // Hash passwords
-  const adminPassword = await bcrypt.hash("admin123", 10);
+  const adminPassword = await bcrypt.hash(SUPER_ADMIN_PASSWORD, 10);
   const userPassword = await bcrypt.hash("password123", 10);
 
-  // 1. Seed users
+  // Keep the configured Super Admin credential usable when the seed is rerun.
   await db
     .insert(users)
-    .values([
-      {
-        id: SUPERADMIN_ID,
-        email: "superadmin@naadi.demo",
+    .values({
+      id: SUPERADMIN_ID,
+      email: SUPER_ADMIN_EMAIL,
+      passwordHash: adminPassword,
+      name: "Super Admin",
+      phone: "+91 90000 00000",
+      role: "super_admin",
+      status: "active",
+    })
+    .onConflictDoUpdate({
+      target: users.id,
+      set: {
+        email: SUPER_ADMIN_EMAIL,
         passwordHash: adminPassword,
-        name: "Super Admin",
-        phone: "+91 90000 00000",
         role: "super_admin",
         status: "active",
       },
+    });
+
+  if (process.argv.includes("--super-admin-only")) {
+    console.log(`Super Admin credential refreshed for ${SUPER_ADMIN_EMAIL}.`);
+    return;
+  }
+
+  // 1. Seed remaining users
+  await db
+    .insert(users)
+    .values([
       {
         id: DEMO_PROVIDER_ID,
         email: "anjali@naadi.demo",

@@ -1,4 +1,4 @@
-# Naadi Loop — Product Requirements Document
+s# Naadi Loop — Product Requirements Document
 
 **Status:** Draft for hackathon build (4-hour scope)
 **Source:** Refined from `PRD.md` (Naadi platform PRD) and `naadi-loop-prd.md` (Loop MVP)
