@@ -1,26 +1,17 @@
-import { actionEvents, careActions, carePlans, patients, sourceDocuments } from "@naadi/db";
+import {
+  actionEvents,
+  careActions,
+  carePlans,
+  patients,
+  providerPatientAssignments,
+  sourceDocuments,
+} from "@naadi/db";
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { sourceTextAppearsIn } from "./care-plan/source-text";
-import {
-  careActionSchema,
-  carePlanIdSchema,
-  documentExtractionResultSchema,
-  verifyCarePlanSchema,
-} from "./schemas";
-import { protectedProcedure, providerProcedure, router } from "./trpc";
-
-function ensureProvider(
-  user: { id: string; role: string } | null | undefined,
-): asserts user is { id: string; role: string } {
-  if (user?.role !== "provider") {
-    throw new TRPCError({
-      code: "FORBIDDEN",
-      message: "Switch to the Provider demo view to manage Care plans.",
-    });
-  }
-}
+import { careActionSchema, carePlanIdSchema, verifyCarePlanSchema } from "./schemas";
+import { providerProcedure, router } from "./trpc";
 
 const actionInsertValues = (carePlanId: string, actions: z.infer<typeof careActionSchema>[]) =>
   actions.map((action) => ({
@@ -38,7 +29,7 @@ const actionInsertValues = (carePlanId: string, actions: z.infer<typeof careActi
   }));
 
 export const carePlanRouter = router({
-  getDraft: protectedProcedure
+  getDraft: providerProcedure
     .input(z.object({ carePlanId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
       const plan = await ctx.db.query.carePlans.findFirst({
@@ -47,95 +38,89 @@ export const carePlanRouter = router({
       if (!plan) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Care plan not found." });
       }
+      if (plan.providerId !== ctx.user.id) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "This Care plan belongs to another Provider.",
+        });
+      }
       const actions = await ctx.db
         .select()
         .from(careActions)
         .where(eq(careActions.carePlanId, plan.id))
         .orderBy(desc(careActions.createdAt));
+      const patient = await ctx.db.query.patients.findFirst({
+        where: eq(patients.id, plan.patientId),
+      });
+      if (!patient) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Patient for this Care plan was not found.",
+        });
+      }
       let sourceContent: string | null = null;
+      let documentType: string | null = null;
       if (plan.sourceDocumentId) {
         const doc = await ctx.db.query.sourceDocuments.findFirst({
           where: eq(sourceDocuments.id, plan.sourceDocumentId),
         });
         sourceContent = doc?.content ?? null;
+        documentType = doc?.documentType ?? null;
       }
-      return { plan, actions, sourceContent };
+      return {
+        plan,
+        actions,
+        sourceContent,
+        documentType,
+        patient: { id: patient.id, name: patient.name },
+      };
     }),
 
-  commitDraft: providerProcedure
-    .input(documentExtractionResultSchema)
+  createManualDraft: providerProcedure
+    .input(z.object({ documentId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      ensureProvider(ctx.user);
-      const providerId = ctx.user.id;
-      return ctx.db.transaction(async (tx) => {
-        const patient = await tx.query.patients.findFirst({
-          where: eq(patients.id, input.patient.id),
-        });
-        if (!patient) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Patient not found." });
-        }
-        const [doc] = await tx
-          .insert(sourceDocuments)
-          .values({
-            patientId: input.document.patientId,
-            documentType: input.document.documentType,
-            content: input.document.content,
-          })
-          .returning();
-        if (!doc) {
-          throw new TRPCError({
-            code: "INTERNAL_SERVER_ERROR",
-            message: "Source document could not be saved.",
-          });
-        }
-        for (const action of input.actions) {
-          if (!sourceTextAppearsIn(action.sourceText, doc.content)) {
-            throw new TRPCError({
-              code: "BAD_REQUEST",
-              message: `Action "${action.title}" has sourceText that does not appear in the source document.`,
-            });
-          }
-        }
-        const [plan] = await tx
-          .insert(carePlans)
-          .values({
-            patientId: input.carePlan.patientId,
-            providerId,
-            sourceDocumentId: doc.id,
-            status: "verified",
-            verifiedAt: new Date(),
-          })
-          .returning();
-        if (!plan) {
-          throw new TRPCError({
-            code: "INTERNAL_SERVER_ERROR",
-            message: "Care plan could not be created.",
-          });
-        }
-        const inserted = await tx
-          .insert(careActions)
-          .values(actionInsertValues(plan.id, input.actions))
-          .returning();
-        if (inserted.length !== input.actions.length) {
-          throw new TRPCError({
-            code: "INTERNAL_SERVER_ERROR",
-            message: "Not all care actions were saved.",
-          });
-        }
-        await tx.insert(actionEvents).values(
-          inserted.map((row) => ({
-            careActionId: row.id,
-            eventType: "verified" as const,
-            createdBy: "provider",
-            notes: "Verified by the Provider before activation.",
-          })),
-        );
-        return { plan, actions: inserted, sourceContent: doc.content };
+      const document = await ctx.db.query.sourceDocuments.findFirst({
+        where: eq(sourceDocuments.id, input.documentId),
       });
+      if (!document) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Source document not found." });
+      }
+      const assignment = await ctx.db.query.providerPatientAssignments.findFirst({
+        where: and(
+          eq(providerPatientAssignments.providerId, ctx.user.id),
+          eq(providerPatientAssignments.patientId, document.patientId),
+        ),
+      });
+      if (!assignment) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "This Patient is not assigned to you." });
+      }
+      const existing = await ctx.db.query.carePlans.findFirst({
+        where: and(
+          eq(carePlans.providerId, ctx.user.id),
+          eq(carePlans.sourceDocumentId, document.id),
+          eq(carePlans.status, "draft"),
+        ),
+      });
+      if (existing) return { carePlanId: existing.id };
+      const [plan] = await ctx.db
+        .insert(carePlans)
+        .values({
+          patientId: document.patientId,
+          providerId: ctx.user.id,
+          sourceDocumentId: document.id,
+          status: "draft",
+        })
+        .returning();
+      if (!plan) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Draft could not be created.",
+        });
+      }
+      return { carePlanId: plan.id };
     }),
 
   verify: providerProcedure.input(verifyCarePlanSchema).mutation(async ({ ctx, input }) => {
-    ensureProvider(ctx.user);
     const parsed = z.array(careActionSchema).min(1).max(50).safeParse(input.actions);
     if (!parsed.success) {
       throw new TRPCError({
@@ -148,6 +133,12 @@ export const carePlanRouter = router({
       const [plan] = await tx.select().from(carePlans).where(eq(carePlans.id, input.carePlanId));
       if (!plan) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Care plan not found." });
+      }
+      if (plan.providerId !== ctx.user.id) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "This Care plan belongs to another Provider.",
+        });
       }
       if (plan.status !== "draft" && plan.status !== "verified") {
         throw new TRPCError({
@@ -214,7 +205,6 @@ export const carePlanRouter = router({
   }),
 
   activate: providerProcedure.input(carePlanIdSchema).mutation(async ({ ctx, input }) => {
-    ensureProvider(ctx.user);
     const providerId = ctx.user.id;
     return ctx.db.transaction(async (tx) => {
       const [plan] = await tx.select().from(carePlans).where(eq(carePlans.id, input.carePlanId));
@@ -253,12 +243,12 @@ export const carePlanRouter = router({
       const [updated] = await tx
         .update(carePlans)
         .set({ status: "active" })
-        .where(eq(carePlans.id, plan.id))
+        .where(and(eq(carePlans.id, plan.id), eq(carePlans.status, "verified")))
         .returning();
       if (!updated) {
         throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: "Care plan could not be activated.",
+          code: "CONFLICT",
+          message: "Care plan was already activated or changed.",
         });
       }
       await tx

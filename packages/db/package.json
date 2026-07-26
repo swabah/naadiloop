@@ -10,12 +10,13 @@
   "scripts": {
     "build": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test src/migration.test.ts",
     "db:push": "drizzle-kit push --force",
+    "db:migrate": "drizzle-kit migrate",
     "db:seed": "tsx src/seed.ts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.4",
-    "@neondatabase/serverless": "^1.0.1",
     "bcryptjs": "^3.0.2",
     "drizzle-orm": "^0.44.5",
     "pg": "^8.13.3"

@@ -42,7 +42,13 @@ const sectionConfig = {
 } as const;
 
 export function ProviderDashboardPage() {
+  const utils = trpc.useUtils();
   const dashboard = trpc.provider.dashboard.useQuery(undefined, { refetchInterval: 5_000 });
+  const resolveHelp = trpc.provider.resolveHelpRequest.useMutation({
+    onSuccess: async () => {
+      await utils.provider.dashboard.invalidate();
+    },
+  });
 
   if (dashboard.isPending) {
     return (
@@ -75,13 +81,10 @@ export function ProviderDashboardPage() {
     <section className="space-y-7">
       <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
         <div>
-          <Badge variant="info">Provider workspace · Operational signals</Badge>
-          <h1 className="mt-4 text-3xl font-bold text-primary-ink sm:text-4xl">
-            Care continuity dashboard
-          </h1>
+          <Badge variant="info">Provider workspace</Badge>
+          <h1 className="mt-4 text-3xl font-bold text-primary-ink sm:text-4xl">Care overview</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">
-            Deterministic Care-gap rules update every five seconds. These are workflow signals, not
-            diagnoses or risk scores.
+            See what needs attention across your connected Patients. Updates appear automatically.
           </p>
         </div>
         <Button variant="outline" onClick={() => void dashboard.refetch()}>
@@ -99,83 +102,144 @@ export function ProviderDashboardPage() {
           </p>
         </Card>
       ) : (
-        <div className="grid gap-5 lg:grid-cols-2">
-          {(Object.keys(sectionConfig) as Array<keyof typeof sectionConfig>).map((sectionKey) => {
-            const config = sectionConfig[sectionKey];
-            const Icon = config.icon;
-            const items = dashboard.data.sections[sectionKey];
-            return (
-              <Card className="overflow-hidden" key={sectionKey}>
-                <div className="flex items-start justify-between gap-4 border-b border-border p-5">
-                  <div className="flex gap-3">
+        <>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {(Object.keys(sectionConfig) as Array<keyof typeof sectionConfig>).map((sectionKey) => {
+              const config = sectionConfig[sectionKey];
+              const Icon = config.icon;
+              const count = dashboard.data.sections[sectionKey].length;
+              return (
+                <Card className="p-4 sm:p-5" key={`metric-${sectionKey}`}>
+                  <div className="flex items-center justify-between gap-3">
                     <div
-                      className={`grid size-10 shrink-0 place-items-center rounded-xl ${config.tone}`}
+                      className={`grid size-10 shrink-0 place-items-center rounded-2xl ${config.tone}`}
                     >
                       <Icon className="size-5" />
                     </div>
-                    <div>
-                      <h2 className="text-lg font-bold text-primary-ink">{config.title}</h2>
-                      <p className="mt-1 text-xs leading-5 text-muted">{config.description}</p>
-                    </div>
+                    <span className="text-2xl font-bold text-primary-ink sm:text-3xl">{count}</span>
                   </div>
-                  <Badge
-                    variant={items.length > 0 && sectionKey !== "onTrack" ? "warning" : "neutral"}
-                  >
-                    {items.length}
-                  </Badge>
-                </div>
-                <div className="divide-y divide-border">
-                  {items.length === 0 ? (
-                    <p className="p-6 text-sm text-muted">No items in this section.</p>
-                  ) : (
-                    items.map((item) => (
-                      <article className="p-5" key={item.id}>
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="text-xs font-bold uppercase tracking-wider text-primary">
-                              {item.type ? actionTypeLabels[item.type] : "Patient support"}
-                            </p>
-                            <h3 className="mt-1 font-bold text-primary-ink">{item.title}</h3>
-                            <p className="mt-1 text-xs text-muted">{item.patient.name}</p>
+                  <p className="mt-4 text-sm font-semibold text-primary-ink">{config.title}</p>
+                </Card>
+              );
+            })}
+          </div>
+
+          <div className="grid gap-5 lg:grid-cols-2">
+            {(Object.keys(sectionConfig) as Array<keyof typeof sectionConfig>).map((sectionKey) => {
+              const config = sectionConfig[sectionKey];
+              const Icon = config.icon;
+              const items = dashboard.data.sections[sectionKey];
+              return (
+                <Card className="overflow-hidden" key={sectionKey}>
+                  <div className="flex items-start justify-between gap-4 border-b border-border/70 p-5">
+                    <div className="flex gap-3">
+                      <div
+                        className={`grid size-10 shrink-0 place-items-center rounded-2xl ${config.tone}`}
+                      >
+                        <Icon className="size-5" />
+                      </div>
+                      <div>
+                        <h2 className="text-lg font-bold text-primary-ink">{config.title}</h2>
+                        <p className="mt-1 text-xs leading-5 text-muted">{config.description}</p>
+                      </div>
+                    </div>
+                    <Badge
+                      variant={items.length > 0 && sectionKey !== "onTrack" ? "warning" : "neutral"}
+                    >
+                      {items.length}
+                    </Badge>
+                  </div>
+                  <div className="divide-y divide-border/70">
+                    {items.length === 0 ? (
+                      <p className="p-6 text-sm text-muted">No items in this section.</p>
+                    ) : (
+                      items.map((item) => (
+                        <article
+                          className="p-5 transition-colors hover:bg-primary-soft/20"
+                          key={item.id}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-xs font-bold uppercase tracking-wider text-primary">
+                                {item.type ? actionTypeLabels[item.type] : "Patient support"}
+                              </p>
+                              <h3 className="mt-1 font-bold text-primary-ink">{item.title}</h3>
+                              <p className="mt-1 text-xs text-muted">{item.patient.name}</p>
+                            </div>
+                            {item.dueDate ? (
+                              <span className="shrink-0 text-xs text-muted">
+                                {formatActionDate(item.dueDate)}
+                              </span>
+                            ) : null}
                           </div>
-                          {item.dueDate ? (
-                            <span className="shrink-0 text-xs text-muted">
-                              {formatActionDate(item.dueDate)}
-                            </span>
-                          ) : null}
-                        </div>
-                        <p className="mt-3 text-sm leading-6 text-text">{item.reason}</p>
-                        <p className="mt-2 text-xs leading-5 text-muted">
-                          Next: {item.nextProviderAction}
-                        </p>
-                        <div className="mt-4">
-                          {item.reportId ? (
-                            <Button asChild size="sm" variant="gate">
-                              <Link
-                                to="/provider/reports/$reportId"
-                                params={{ reportId: item.reportId }}
-                              >
-                                Review report
-                                <ArrowRight className="size-4" />
-                              </Link>
-                            </Button>
-                          ) : (
-                            <Button asChild size="sm" variant="outline">
-                              <Link to="/provider/patients">
-                                View Patient context
-                                <ArrowRight className="size-4" />
-                              </Link>
-                            </Button>
-                          )}
-                        </div>
-                      </article>
-                    ))
-                  )}
-                </div>
-              </Card>
-            );
-          })}
-        </div>
+                          <p className="mt-3 text-sm leading-6 text-text">{item.reason}</p>
+                          <p className="mt-2 text-xs leading-5 text-muted">
+                            Next: {item.nextProviderAction}
+                          </p>
+                          <div className="mt-4 flex flex-wrap gap-2">
+                            {item.reportId ? (
+                              <Button asChild size="sm" variant="gate">
+                                <Link
+                                  to="/provider/reports/$reportId"
+                                  params={{ reportId: item.reportId }}
+                                >
+                                  Review report
+                                  <ArrowRight className="size-4" />
+                                </Link>
+                              </Button>
+                            ) : item.supportRequestId ? (
+                              <>
+                                <Button asChild size="sm" variant="outline">
+                                  <Link
+                                    to="/provider/patients/$patientId"
+                                    params={{ patientId: item.patient.id }}
+                                    hash="support-requests"
+                                  >
+                                    View support request
+                                    <ArrowRight className="size-4" />
+                                  </Link>
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  disabled={resolveHelp.isPending}
+                                  onClick={() => {
+                                    const resolution = window.prompt(
+                                      "Record how the Patient support request was resolved:",
+                                    );
+                                    if (resolution?.trim()) {
+                                      resolveHelp.mutate({
+                                        eventId: item.supportRequestId ?? "",
+                                        resolution,
+                                      });
+                                    }
+                                  }}
+                                >
+                                  Quick resolve
+                                </Button>
+                              </>
+                            ) : (
+                              <Button asChild size="sm" variant="outline">
+                                <Link
+                                  to="/provider/patients/$patientId"
+                                  params={{ patientId: item.patient.id }}
+                                  hash={item.actionId ? `action-${item.actionId}` : undefined}
+                                >
+                                  View Patient context
+                                  <ArrowRight className="size-4" />
+                                </Link>
+                              </Button>
+                            )}
+                          </div>
+                        </article>
+                      ))
+                    )}
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        </>
       )}
     </section>
   );

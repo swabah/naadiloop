@@ -1,6 +1,8 @@
 PRD.md
 # Dependencies and build output
 node_modules/
+.pnpm-store/
+**/pgdata/
 dist/
 .vite/
 *.tsbuildinfo

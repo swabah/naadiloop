@@ -105,8 +105,8 @@ export function PatientReportPage() {
                 {file?.name ?? "Choose a sample report"}
               </span>
               <span className="mt-1 block text-xs leading-5 text-muted">
-                Demo mode records file metadata and a mock URL; it does not upload real medical
-                files.
+                Demo mode records only the filename, file type, and size. It does not upload or
+                store real medical files.
               </span>
             </label>
 
@@ -135,7 +135,11 @@ export function PatientReportPage() {
                 if (!file) return;
                 upload.mutate({
                   actionId,
-                  fileUrl: `https://example.invalid/demo-reports/${encodeURIComponent(file.name)}`,
+                  file: {
+                    name: file.name,
+                    type: file.type || "application/octet-stream",
+                    size: file.size,
+                  },
                 });
               }}
             >

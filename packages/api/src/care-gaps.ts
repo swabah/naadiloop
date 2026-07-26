@@ -28,7 +28,8 @@ export interface CareGapEvent {
     | "review_started"
     | "reviewed"
     | "closed"
-    | "follow_up_created";
+    | "follow_up_created"
+    | "help_resolved";
   timestamp: Date;
   notes: string | null;
 }
@@ -89,7 +90,17 @@ export function evaluateCareGaps(
     });
   }
 
-  if (input.events.some((event) => event.eventType === "help_requested")) {
+  const latestHelpRequest = input.events
+    .filter((event) => event.eventType === "help_requested")
+    .sort((left, right) => right.timestamp.getTime() - left.timestamp.getTime())[0];
+  const helpWasResolved =
+    latestHelpRequest &&
+    input.events.some(
+      (event) =>
+        event.eventType === "help_resolved" &&
+        event.timestamp.getTime() >= latestHelpRequest.timestamp.getTime(),
+    );
+  if (latestHelpRequest && !helpWasResolved) {
     gaps.push({
       rule: "CG-4",
       reason: "Patient requested support.",

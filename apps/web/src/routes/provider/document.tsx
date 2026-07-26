@@ -23,7 +23,6 @@ import {
   SelectValue,
 } from "../../components/ui/select";
 import { Textarea } from "../../components/ui/textarea";
-import { saveExtractionHandoff } from "../../lib/extraction-handoff";
 import { extractDigitalPdfText } from "../../lib/pdf-text";
 import { trpc } from "../../lib/trpc";
 
@@ -46,6 +45,7 @@ export function ProviderDocumentPage() {
   const patientsQuery = trpc.patient.list.useQuery();
   const createDocument = trpc.document.create.useMutation();
   const extractDocument = trpc.document.extract.useMutation();
+  const createManualDraft = trpc.carePlan.createManualDraft.useMutation();
   const [mode, setMode] = useState<InputMode>("paste");
   const [documentType, setDocumentType] = useState<DocumentType>("discharge_summary");
   const [content, setContent] = useState("");
@@ -62,7 +62,6 @@ export function ProviderDocumentPage() {
     setError(null);
     try {
       const result = await extractDocument.mutateAsync({ documentId });
-      saveExtractionHandoff(result);
       await navigate({
         to: "/provider/patients/$patientId/verify",
         params: { patientId },
@@ -125,12 +124,24 @@ export function ProviderDocumentPage() {
     }
   };
 
-  const continueManually = () =>
-    navigate({
-      to: "/provider/patients/$patientId/verify",
-      params: { patientId },
-      search: { manual: true },
-    });
+  const continueManually = async () => {
+    if (!savedDocumentId) return;
+    setError(null);
+    try {
+      const result = await createManualDraft.mutateAsync({ documentId: savedDocumentId });
+      await navigate({
+        to: "/provider/patients/$patientId/verify",
+        params: { patientId },
+        search: { carePlanId: result.carePlanId, manual: true },
+      });
+    } catch (mutationError) {
+      setError(
+        mutationError instanceof Error
+          ? mutationError.message
+          : "Manual draft could not be opened.",
+      );
+    }
+  };
 
   return (
     <section className="space-y-7">
@@ -266,6 +277,22 @@ export function ProviderDocumentPage() {
                 maxLength={100_000}
                 disabled={busy}
               />
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setContent(
+                    "Take Amlodipine 5 mg once daily after breakfast. Complete a CBC blood test tomorrow. Attend a cardiology consultation within three days. Return to the PHC for follow-up in seven days.",
+                  );
+                  setSavedDocumentId(null);
+                  setError(null);
+                  setProgress("idle");
+                }}
+                disabled={busy}
+              >
+                Load fictional four-action sample
+              </Button>
             </label>
 
             {progress === "saving" || progress === "extracting" ? (
@@ -323,7 +350,12 @@ export function ProviderDocumentPage() {
                 </Button>
               )}
               {progress === "failed" ? (
-                <Button type="button" variant="outline" onClick={continueManually}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void continueManually()}
+                  disabled={!savedDocumentId || createManualDraft.isPending}
+                >
                   Continue with manual entry
                 </Button>
               ) : null}

@@ -6,18 +6,21 @@ import {
   type getDb,
   organizationDetails,
   patients,
+  providerPatientAssignments,
   reports,
   sourceDocuments,
+  uhidFromPatientId,
   users,
 } from "@naadi/db";
 import { TRPCError } from "@trpc/server";
 import bcrypt from "bcryptjs";
-import { and, asc, desc, eq, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import jwt from "jsonwebtoken";
 import { z } from "zod";
 import { patientOutcomeTransition, reportUploadTransition } from "./action-transitions";
 import { dashboardSectionFor, evaluateCareGaps } from "./care-gaps";
 import { canCloseAction } from "./closure-policy";
+import { getJwtSecret } from "./context";
 import {
   type PatientActionRecord,
   projectPatientJourney,
@@ -33,13 +36,15 @@ import {
   documentInputSchema,
   helpRequestSchema,
   loginInputSchema,
-  patientCreateSchema,
   patientIdSchema,
+  patientLinkSchema,
+  patientLookupSchema,
   registerInputSchema,
   reviewReportSchema,
   uploadReportSchema,
 } from "./schemas";
 import {
+  patientProcedure,
   protectedProcedure,
   providerProcedure,
   publicProcedure,
@@ -47,13 +52,30 @@ import {
   superAdminProcedure,
 } from "./trpc";
 
-const JWT_SECRET = process.env.JWT_SECRET || "super-secret-naadi-jwt-key-2026";
-
 function assertPatientAccess(user: { role: string; patientId?: string }, patientId: string) {
   if (user.role === "patient" && user.patientId !== patientId) {
     throw new TRPCError({
       code: "FORBIDDEN",
       message: "This Care journey belongs to another Patient.",
+    });
+  }
+}
+
+async function assertProviderPatientAccess(
+  db: ReturnType<typeof getDb>,
+  providerId: string,
+  patientId: string,
+) {
+  const assignment = await db.query.providerPatientAssignments.findFirst({
+    where: and(
+      eq(providerPatientAssignments.providerId, providerId),
+      eq(providerPatientAssignments.patientId, patientId),
+    ),
+  });
+  if (!assignment) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "This Patient is not assigned to your Provider account.",
     });
   }
 }
@@ -130,7 +152,11 @@ function serializePatientAction<
   };
 }
 
-async function buildProviderDashboard(db: ReturnType<typeof getDb>, patientId?: string) {
+async function buildProviderDashboard(
+  db: ReturnType<typeof getDb>,
+  providerId: string,
+  patientId?: string,
+) {
   const now = new Date();
   const rows = await db
     .select({ action: careActions, patient: patients })
@@ -139,6 +165,7 @@ async function buildProviderDashboard(db: ReturnType<typeof getDb>, patientId?: 
     .innerJoin(patients, eq(carePlans.patientId, patients.id))
     .where(
       and(
+        eq(carePlans.providerId, providerId),
         eq(carePlans.status, "active"),
         eq(careActions.verified, true),
         patientId ? eq(patients.id, patientId) : undefined,
@@ -177,6 +204,9 @@ async function buildProviderDashboard(db: ReturnType<typeof getDb>, patientId?: 
         now,
       );
       const section = dashboardSectionFor(gaps);
+      const latestHelpRequest = events
+        .filter((event) => event.eventType === "help_requested")
+        .sort((left, right) => right.timestamp.getTime() - left.timestamp.getTime())[0];
       const primaryGap =
         gaps.find((gap) =>
           section === "requiresAttention"
@@ -201,6 +231,9 @@ async function buildProviderDashboard(db: ReturnType<typeof getDb>, patientId?: 
         nextProviderAction:
           primaryGap?.nextProviderAction ?? "No Provider action is currently required.",
         reportId: gaps.find((gap) => gap.reportId)?.reportId ?? null,
+        supportRequestId: gaps.some((gap) => gap.rule === "CG-4")
+          ? (latestHelpRequest?.id ?? null)
+          : null,
       };
     }),
   );
@@ -209,16 +242,29 @@ async function buildProviderDashboard(db: ReturnType<typeof getDb>, patientId?: 
     .select({ event: actionEvents, patient: patients })
     .from(actionEvents)
     .innerJoin(patients, eq(actionEvents.patientId, patients.id))
+    .innerJoin(providerPatientAssignments, eq(providerPatientAssignments.patientId, patients.id))
     .where(
       and(
+        eq(providerPatientAssignments.providerId, providerId),
         isNull(actionEvents.careActionId),
-        eq(actionEvents.eventType, "help_requested"),
+        inArray(actionEvents.eventType, ["help_requested", "help_resolved"]),
         patientId ? eq(patients.id, patientId) : undefined,
       ),
     )
     .orderBy(desc(actionEvents.timestamp));
 
-  const patientHelpItems = patientHelpRows.map((row) => ({
+  const unresolvedPatientHelpRows = patientHelpRows.filter(
+    (row) =>
+      row.event.eventType === "help_requested" &&
+      !patientHelpRows.some(
+        (candidate) =>
+          candidate.patient.id === row.patient.id &&
+          candidate.event.eventType === "help_resolved" &&
+          candidate.event.timestamp >= row.event.timestamp,
+      ),
+  );
+
+  const patientHelpItems = unresolvedPatientHelpRows.map((row) => ({
     id: row.event.id,
     actionId: null,
     patient: { id: row.patient.id, name: row.patient.name },
@@ -237,6 +283,7 @@ async function buildProviderDashboard(db: ReturnType<typeof getDb>, patientId?: 
     reason: row.event.notes ?? "Patient requested support.",
     nextProviderAction: "Respond to the Patient's support request.",
     reportId: null,
+    supportRequestId: row.event.id,
   }));
 
   const items = [...actionItems, ...patientHelpItems];
@@ -249,6 +296,178 @@ async function buildProviderDashboard(db: ReturnType<typeof getDb>, patientId?: 
       overdue: items.filter((item) => item.section === "overdue"),
       onTrack: items.filter((item) => item.section === "onTrack"),
     },
+  };
+}
+
+async function buildProviderPatientOverview(
+  db: ReturnType<typeof getDb>,
+  providerId: string,
+  patientId: string,
+) {
+  await assertProviderPatientAccess(db, providerId, patientId);
+  const patient = await db.query.patients.findFirst({ where: eq(patients.id, patientId) });
+  if (!patient) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "The Patient could not be found." });
+  }
+
+  const planRows = await db
+    .select({
+      plan: carePlans,
+      document: {
+        id: sourceDocuments.id,
+        documentType: sourceDocuments.documentType,
+        uploadedAt: sourceDocuments.uploadedAt,
+      },
+    })
+    .from(carePlans)
+    .leftJoin(sourceDocuments, eq(carePlans.sourceDocumentId, sourceDocuments.id))
+    .where(and(eq(carePlans.providerId, providerId), eq(carePlans.patientId, patientId)))
+    .orderBy(desc(carePlans.createdAt), desc(carePlans.id));
+
+  const planIds = planRows.map((row) => row.plan.id);
+  const ownedActions =
+    planIds.length > 0
+      ? await db
+          .select()
+          .from(careActions)
+          .where(inArray(careActions.carePlanId, planIds))
+          .orderBy(desc(careActions.createdAt), desc(careActions.id))
+      : [];
+  const actionIds = ownedActions.map((action) => action.id);
+  const ownedReports =
+    actionIds.length > 0
+      ? await db
+          .select()
+          .from(reports)
+          .where(inArray(reports.careActionId, actionIds))
+          .orderBy(desc(reports.uploadedAt), desc(reports.id))
+      : [];
+  const relevantEvents = await db
+    .select()
+    .from(actionEvents)
+    .where(
+      actionIds.length > 0
+        ? or(
+            inArray(actionEvents.careActionId, actionIds),
+            and(eq(actionEvents.patientId, patientId), isNull(actionEvents.careActionId)),
+          )
+        : and(eq(actionEvents.patientId, patientId), isNull(actionEvents.careActionId)),
+    )
+    .orderBy(desc(actionEvents.timestamp), desc(actionEvents.id));
+
+  const unresolvedSupportRequests = relevantEvents.filter(
+    (event) =>
+      event.eventType === "help_requested" &&
+      !relevantEvents.some(
+        (candidate) =>
+          candidate.eventType === "help_resolved" &&
+          candidate.careActionId === event.careActionId &&
+          candidate.timestamp >= event.timestamp,
+      ),
+  );
+  const actionById = new Map(ownedActions.map((action) => [action.id, action]));
+  const activePlanIds = new Set(
+    planRows.filter((row) => row.plan.status === "active").map((row) => row.plan.id),
+  );
+  const reportsByAction = new Map(ownedReports.map((report) => [report.careActionId, report]));
+  const eventsByAction = new Map<string, typeof relevantEvents>();
+  for (const event of relevantEvents) {
+    if (!event.careActionId) continue;
+    const existing = eventsByAction.get(event.careActionId) ?? [];
+    existing.push(event);
+    eventsByAction.set(event.careActionId, existing);
+  }
+  const actionsByPlan = new Map<string, typeof ownedActions>();
+  for (const action of ownedActions) {
+    const existing = actionsByPlan.get(action.carePlanId) ?? [];
+    existing.push(action);
+    actionsByPlan.set(action.carePlanId, existing);
+  }
+
+  return {
+    patient: {
+      id: patient.id,
+      uhid: patient.uhid,
+      name: patient.name,
+      age: patient.age,
+      phone: patient.phone,
+      language: patient.language,
+      caregiverContact: patient.caregiverContact ?? null,
+      assigned: true,
+      createdAt: patient.createdAt.toISOString(),
+    },
+    summary: {
+      activeJourneys: planRows.filter((row) => row.plan.status === "active").length,
+      drafts: planRows.filter(
+        (row) => row.plan.status === "draft" || row.plan.status === "verified",
+      ).length,
+      openActions: ownedActions.filter(
+        (action) => activePlanIds.has(action.carePlanId) && action.status !== "CLOSED",
+      ).length,
+      awaitingReview: ownedReports.filter(
+        (report) =>
+          report.status === "AWAITING_REVIEW" &&
+          activePlanIds.has(actionById.get(report.careActionId)?.carePlanId ?? ""),
+      ).length,
+      supportRequests: unresolvedSupportRequests.length,
+      closedActions: ownedActions.filter((action) => action.status === "CLOSED").length,
+    },
+    carePlans: planRows.map((row) => ({
+      id: row.plan.id,
+      status: row.plan.status,
+      createdAt: row.plan.createdAt.toISOString(),
+      verifiedAt: row.plan.verifiedAt?.toISOString() ?? null,
+      document: row.document?.id
+        ? {
+            id: row.document.id,
+            documentType: row.document.documentType,
+            uploadedAt: row.document.uploadedAt.toISOString(),
+          }
+        : null,
+      actions: (actionsByPlan.get(row.plan.id) ?? []).map((action) => {
+        const report = reportsByAction.get(action.id);
+        return {
+          ...action,
+          dueDate: action.dueDate?.toISOString() ?? null,
+          createdAt: action.createdAt.toISOString(),
+          report: report
+            ? {
+                id: report.id,
+                fileName: report.fileName,
+                fileType: report.fileType,
+                fileSize: report.fileSize,
+                status: report.status,
+                providerComment: report.providerComment,
+                uploadedAt: report.uploadedAt.toISOString(),
+                reviewedAt: report.reviewedAt?.toISOString() ?? null,
+              }
+            : null,
+          events: (eventsByAction.get(action.id) ?? []).map((event) => ({
+            id: event.id,
+            eventType: event.eventType,
+            createdBy: event.createdBy,
+            notes: event.notes,
+            timestamp: event.timestamp.toISOString(),
+          })),
+        };
+      }),
+    })),
+    supportRequests: unresolvedSupportRequests.map((event) => ({
+      id: event.id,
+      actionId: event.careActionId,
+      actionTitle: event.careActionId ? (actionById.get(event.careActionId)?.title ?? null) : null,
+      notes: event.notes,
+      timestamp: event.timestamp.toISOString(),
+    })),
+    activity: relevantEvents.map((event) => ({
+      id: event.id,
+      actionId: event.careActionId,
+      actionTitle: event.careActionId ? (actionById.get(event.careActionId)?.title ?? null) : null,
+      eventType: event.eventType,
+      createdBy: event.createdBy,
+      notes: event.notes,
+      timestamp: event.timestamp.toISOString(),
+    })),
   };
 }
 
@@ -266,67 +485,59 @@ export const appRouter = router({
         });
       }
 
-      const aadhaarNumber =
-        input.role === "patient" ? input.aadhaarNumber?.replace(/\s+/g, "") : undefined;
-      if (aadhaarNumber) {
-        const existingAadhaar = await ctx.db.query.users.findFirst({
-          where: eq(users.aadhaarNumber, aadhaarNumber),
-        });
-        if (existingAadhaar) {
+      const status = input.role === "patient" ? "active" : "pending_approval";
+      const registration = await ctx.db.transaction(async (tx) => {
+        const [user] = await tx
+          .insert(users)
+          .values({
+            name: input.name,
+            email,
+            passwordHash: await bcrypt.hash(input.password, 10),
+            phone: input.phone,
+            role: input.role,
+            status,
+          })
+          .returning();
+        if (!user) {
           throw new TRPCError({
-            code: "CONFLICT",
-            message: "A Patient with this Aadhaar number is already registered.",
+            code: "INTERNAL_SERVER_ERROR",
+            message: "The account could not be created. Please try again.",
           });
         }
-      }
 
-      const status = input.role === "patient" ? "active" : "pending_approval";
-      const [user] = await ctx.db
-        .insert(users)
-        .values({
-          name: input.name,
-          email,
-          passwordHash: await bcrypt.hash(input.password, 10),
-          phone: input.phone,
-          role: input.role,
-          status,
-          aadhaarNumber,
-        })
-        .returning();
-      if (!user) {
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: "The account could not be created. Please try again.",
-        });
-      }
-
-      if (input.role === "patient") {
-        await ctx.db.insert(patients).values({
-          id: user.id,
-          name: input.name,
-          age: input.age ?? null,
-          phone: input.phone ?? null,
-          language: input.language ?? "en",
-        });
-      } else {
-        await ctx.db.insert(organizationDetails).values({
-          userId: user.id,
-          orgName: input.orgName ?? `${input.name}'s Facility`,
-          orgType: input.role === "hospital_admin" ? "hospital" : "pharmacy",
-          licenseNumber: input.licenseNumber ?? "PENDING",
-          address: input.address,
-          city: input.city,
-          state: input.state,
-          pincode: input.pincode,
-        });
-      }
+        if (input.role === "patient") {
+          const uhid = uhidFromPatientId(user.id);
+          await tx.insert(patients).values({
+            id: user.id,
+            uhid,
+            name: input.name,
+            age: input.age ?? null,
+            phone: input.phone ?? null,
+            language: input.language ?? "en",
+          });
+          return { uhid };
+        } else {
+          await tx.insert(organizationDetails).values({
+            userId: user.id,
+            orgName: input.orgName ?? `${input.name}'s Facility`,
+            orgType: input.role === "hospital_admin" ? "hospital" : "pharmacy",
+            licenseNumber: input.licenseNumber ?? "PENDING",
+            address: input.address,
+            city: input.city,
+            state: input.state,
+            pincode: input.pincode,
+          });
+          return { uhid: null };
+        }
+      });
 
       return {
         success: true,
         status,
+        uhid: registration.uhid,
         message:
           input.role === "patient"
-            ? "Registration successful! You can now log in."
+            ? "Registration successful. Keep your UHID safe; a Hospital needs it to request access."
             : "Registration submitted. Your administration account is pending approval.",
       };
     }),
@@ -353,6 +564,10 @@ export const appRouter = router({
         });
       }
 
+      const patientProfile =
+        user.role === "patient"
+          ? await ctx.db.query.patients.findFirst({ where: eq(patients.id, user.id) })
+          : null;
       const payload = {
         id: user.id,
         email: user.email,
@@ -360,9 +575,15 @@ export const appRouter = router({
         role: user.role,
         status: user.status,
         patientId: user.role === "patient" ? user.id : undefined,
+        uhid: patientProfile?.uhid,
       };
       return {
-        token: jwt.sign(payload, JWT_SECRET, { expiresIn: "7d" }),
+        token: jwt.sign({}, getJwtSecret(), {
+          subject: user.id,
+          issuer: "naadi-loop",
+          audience: "naadi-loop-web",
+          expiresIn: "7d",
+        }),
         user: payload,
       };
     }),
@@ -382,39 +603,110 @@ export const appRouter = router({
           .map((organization) => [organization.userId, organization]),
       );
       return pendingUsers.map((user) => ({
-        ...user,
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        phone: user.phone,
+        role: user.role,
+        status: user.status,
+        createdAt: user.createdAt,
         organization: organizationByUser.get(user.id) ?? null,
       }));
     }),
     approveUser: superAdminProcedure.input(adminApprovalSchema).mutation(async ({ ctx, input }) => {
+      const target = await ctx.db.query.users.findFirst({ where: eq(users.id, input.userId) });
+      if (
+        target?.status !== "pending_approval" ||
+        !["hospital_admin", "pharmacy_admin"].includes(target?.role ?? "")
+      ) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "User account not found." });
+      }
       const [updated] = await ctx.db
         .update(users)
         .set({ status: input.action === "approve" ? "active" : "rejected" })
         .where(eq(users.id, input.userId))
         .returning();
-      if (!updated) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "User account not found." });
-      }
+      if (!updated) throw new TRPCError({ code: "NOT_FOUND", message: "User account not found." });
       return { success: true, userId: updated.id, status: updated.status };
     }),
   }),
   patient: router({
     list: providerProcedure.query(({ ctx }) =>
-      ctx.db.query.patients.findMany({
-        orderBy: (patient, { asc, desc }) => [desc(patient.createdAt), asc(patient.name)],
-      }),
+      ctx.db
+        .select({ patient: patients })
+        .from(providerPatientAssignments)
+        .innerJoin(patients, eq(providerPatientAssignments.patientId, patients.id))
+        .where(eq(providerPatientAssignments.providerId, ctx.user.id))
+        .orderBy(desc(patients.createdAt), asc(patients.name))
+        .then((rows) => rows.map((row) => row.patient)),
     ),
-    create: providerProcedure.input(patientCreateSchema).mutation(async ({ ctx, input }) => {
-      const [patient] = await ctx.db.insert(patients).values(input).returning();
-      if (!patient) {
+    findByUhid: providerProcedure.input(patientLookupSchema).query(async ({ ctx, input }) => {
+      const [row] = await ctx.db
+        .select({ patient: patients })
+        .from(patients)
+        .innerJoin(users, eq(users.id, patients.id))
+        .where(
+          and(eq(patients.uhid, input.uhid), eq(users.role, "patient"), eq(users.status, "active")),
+        )
+        .limit(1);
+      if (!row) {
         throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: "The Patient could not be created. Please try again.",
+          code: "NOT_FOUND",
+          message: "No active Patient was found for this UHID.",
         });
       }
-      return patient;
+      const assigned = await ctx.db.query.providerPatientAssignments.findFirst({
+        where: and(
+          eq(providerPatientAssignments.providerId, ctx.user.id),
+          eq(providerPatientAssignments.patientId, row.patient.id),
+        ),
+      });
+      const phoneDigits = row.patient.phone?.replace(/\D/g, "") ?? "";
+      return {
+        patient: {
+          uhid: row.patient.uhid,
+          name: row.patient.name,
+          phoneHint: phoneDigits ? `ending ${phoneDigits.slice(-4)}` : "not available",
+        },
+        alreadyAssigned: Boolean(assigned),
+      };
     }),
-    nextAction: protectedProcedure.input(patientIdSchema).query(async ({ ctx, input }) => {
+    linkByUhid: providerProcedure.input(patientLinkSchema).mutation(async ({ ctx, input }) => {
+      if (input.otp !== "000000") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Invalid OTP. Use 000000 for this MVP.",
+        });
+      }
+      const [row] = await ctx.db
+        .select({ patient: patients })
+        .from(patients)
+        .innerJoin(users, eq(users.id, patients.id))
+        .where(
+          and(eq(patients.uhid, input.uhid), eq(users.role, "patient"), eq(users.status, "active")),
+        )
+        .limit(1);
+      if (!row) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "No active Patient was found for this UHID.",
+        });
+      }
+      const inserted = await ctx.db
+        .insert(providerPatientAssignments)
+        .values({ providerId: ctx.user.id, patientId: row.patient.id })
+        .onConflictDoNothing()
+        .returning({ patientId: providerPatientAssignments.patientId });
+      return {
+        patient: {
+          id: row.patient.id,
+          uhid: row.patient.uhid,
+          name: row.patient.name,
+        },
+        linked: inserted.length > 0,
+      };
+    }),
+    nextAction: patientProcedure.input(patientIdSchema).query(async ({ ctx, input }) => {
       assertPatientAccess(ctx.user, input.patientId);
       const now = new Date();
       const visibleActions = await getVisiblePatientActions(ctx.db, input.patientId);
@@ -431,7 +723,7 @@ export const appRouter = router({
           visibleActions.length > 0 && visibleActions.every((action) => action.status === "CLOSED"),
       };
     }),
-    journey: protectedProcedure.input(patientIdSchema).query(async ({ ctx, input }) => {
+    journey: patientProcedure.input(patientIdSchema).query(async ({ ctx, input }) => {
       assertPatientAccess(ctx.user, input.patientId);
       const visibleActions = await getVisiblePatientActions(ctx.db, input.patientId);
       const projected = projectPatientJourney(visibleActions, new Date());
@@ -440,7 +732,7 @@ export const appRouter = router({
         progress: projected.progress,
       };
     }),
-    actionDetails: protectedProcedure.input(actionIdSchema).query(async ({ ctx, input }) => {
+    actionDetails: patientProcedure.input(actionIdSchema).query(async ({ ctx, input }) => {
       const [row] = await ctx.db
         .select({ action: careActions, patient: patients })
         .from(careActions)
@@ -470,80 +762,85 @@ export const appRouter = router({
         patient: { id: row.patient.id, name: row.patient.name },
       };
     }),
-    markCompleted: protectedProcedure
-      .input(completeActionSchema)
-      .mutation(async ({ ctx, input }) => {
-        const row = await getVisiblePatientActionForMutation(ctx.db, input.actionId);
-        assertPatientAccess(ctx.user, row.patient.id);
-        const transition = patientOutcomeTransition(
-          { type: row.action.type, status: row.action.status },
-          input.outcome,
-        );
-        if (!transition.ok) {
-          throw new TRPCError({ code: transition.code, message: transition.message });
-        }
+    markCompleted: patientProcedure.input(completeActionSchema).mutation(async ({ ctx, input }) => {
+      const row = await getVisiblePatientActionForMutation(ctx.db, input.actionId);
+      assertPatientAccess(ctx.user, row.patient.id);
+      const transition = patientOutcomeTransition(
+        { type: row.action.type, status: row.action.status },
+        input.outcome,
+      );
+      if (!transition.ok) {
+        throw new TRPCError({ code: transition.code, message: transition.message });
+      }
 
-        if (input.outcome === "skipped") {
-          await rejectRecentDuplicateEvent(ctx.db, row.action.id, "skipped");
-          await ctx.db.insert(actionEvents).values({
-            id: crypto.randomUUID(),
-            careActionId: row.action.id,
-            patientId: row.patient.id,
-            eventType: "skipped",
-            createdBy: "patient",
-            notes: input.notes ?? "Patient recorded an unconfirmed medication outcome.",
+      if (input.outcome === "skipped") {
+        await rejectRecentDuplicateEvent(ctx.db, row.action.id, "skipped");
+        await ctx.db.insert(actionEvents).values({
+          id: crypto.randomUUID(),
+          careActionId: row.action.id,
+          patientId: row.patient.id,
+          eventType: "skipped",
+          createdBy: "patient",
+          notes: input.notes ?? "Patient recorded an unconfirmed medication outcome.",
+        });
+        return { actionId: row.action.id, status: row.action.status, outcome: input.outcome };
+      }
+
+      if (input.outcome === "remind") {
+        await rejectRecentDuplicateEvent(ctx.db, row.action.id, "reminder_requested");
+        await ctx.db.insert(actionEvents).values({
+          id: crypto.randomUUID(),
+          careActionId: row.action.id,
+          patientId: row.patient.id,
+          eventType: "reminder_requested",
+          createdBy: "patient",
+          notes: input.notes ?? "Patient asked to be reminded about this medication.",
+        });
+        return { actionId: row.action.id, status: row.action.status, outcome: input.outcome };
+      }
+
+      if (input.outcome === "help") {
+        await rejectRecentDuplicateEvent(ctx.db, row.action.id, "help_requested");
+        await ctx.db.insert(actionEvents).values({
+          id: crypto.randomUUID(),
+          careActionId: row.action.id,
+          patientId: row.patient.id,
+          eventType: "help_requested",
+          createdBy: "patient",
+          notes: input.notes ?? "Patient requested Provider support.",
+        });
+        return { actionId: row.action.id, status: row.action.status, outcome: input.outcome };
+      }
+
+      await ctx.db.transaction(async (tx) => {
+        const [updated] = await tx
+          .update(careActions)
+          .set({ status: "COMPLETED" })
+          .where(and(eq(careActions.id, row.action.id), eq(careActions.status, row.action.status)))
+          .returning({ id: careActions.id });
+        if (!updated) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "This Care action was already updated.",
           });
-          return { actionId: row.action.id, status: row.action.status, outcome: input.outcome };
         }
+        await tx.insert(actionEvents).values({
+          id: crypto.randomUUID(),
+          careActionId: row.action.id,
+          patientId: row.patient.id,
+          eventType: "completed",
+          createdBy: "patient",
+          notes:
+            input.notes ??
+            (input.outcome === "taken"
+              ? "Patient confirmed the medication was taken."
+              : "Patient marked the Care action complete."),
+        });
+      });
 
-        if (input.outcome === "remind") {
-          await rejectRecentDuplicateEvent(ctx.db, row.action.id, "reminder_requested");
-          await ctx.db.insert(actionEvents).values({
-            id: crypto.randomUUID(),
-            careActionId: row.action.id,
-            patientId: row.patient.id,
-            eventType: "reminder_requested",
-            createdBy: "patient",
-            notes: input.notes ?? "Patient asked to be reminded about this medication.",
-          });
-          return { actionId: row.action.id, status: row.action.status, outcome: input.outcome };
-        }
-
-        if (input.outcome === "help") {
-          await rejectRecentDuplicateEvent(ctx.db, row.action.id, "help_requested");
-          await ctx.db.insert(actionEvents).values({
-            id: crypto.randomUUID(),
-            careActionId: row.action.id,
-            patientId: row.patient.id,
-            eventType: "help_requested",
-            createdBy: "patient",
-            notes: input.notes ?? "Patient requested Provider support.",
-          });
-          return { actionId: row.action.id, status: row.action.status, outcome: input.outcome };
-        }
-
-        await ctx.db.batch([
-          ctx.db
-            .update(careActions)
-            .set({ status: "COMPLETED" })
-            .where(eq(careActions.id, row.action.id)),
-          ctx.db.insert(actionEvents).values({
-            id: crypto.randomUUID(),
-            careActionId: row.action.id,
-            patientId: row.patient.id,
-            eventType: "completed",
-            createdBy: "patient",
-            notes:
-              input.notes ??
-              (input.outcome === "taken"
-                ? "Patient confirmed the medication was taken."
-                : "Patient marked the Care action complete."),
-          }),
-        ]);
-
-        return { actionId: row.action.id, status: "COMPLETED" as const, outcome: input.outcome };
-      }),
-    skipDose: protectedProcedure
+      return { actionId: row.action.id, status: "COMPLETED" as const, outcome: input.outcome };
+    }),
+    skipDose: patientProcedure
       .input(actionIdSchema.extend({ notes: z.string().trim().max(1_000).optional() }))
       .mutation(async ({ ctx, input }) => {
         const row = await getVisiblePatientActionForMutation(ctx.db, input.actionId);
@@ -566,7 +863,7 @@ export const appRouter = router({
         });
         return { actionId: row.action.id, status: row.action.status, outcome: "skipped" as const };
       }),
-    requestHelp: protectedProcedure.input(helpRequestSchema).mutation(async ({ ctx, input }) => {
+    requestHelp: patientProcedure.input(helpRequestSchema).mutation(async ({ ctx, input }) => {
       let patientId = input.patientId;
       if (input.actionId) {
         const row = await getVisiblePatientActionForMutation(ctx.db, input.actionId);
@@ -601,7 +898,7 @@ export const appRouter = router({
       });
       return { eventId, patientId, actionId: input.actionId ?? null };
     }),
-    uploadReport: protectedProcedure.input(uploadReportSchema).mutation(async ({ ctx, input }) => {
+    uploadReport: patientProcedure.input(uploadReportSchema).mutation(async ({ ctx, input }) => {
       const row = await getVisiblePatientActionForMutation(ctx.db, input.actionId);
       assertPatientAccess(ctx.user, row.patient.id);
       const transition = reportUploadTransition({
@@ -613,31 +910,49 @@ export const appRouter = router({
       }
 
       const reportId = crypto.randomUUID();
-      await ctx.db.batch([
-        ctx.db.insert(reports).values({
+      await ctx.db.transaction(async (tx) => {
+        await tx.insert(reports).values({
           id: reportId,
           careActionId: row.action.id,
-          fileUrl: input.fileUrl,
+          fileName: input.file.name,
+          fileType: input.file.type,
+          fileSize: input.file.size,
           status: "AWAITING_REVIEW",
-        }),
-        ctx.db
+        });
+        const [updated] = await tx
           .update(careActions)
           .set({ status: "AWAITING_REVIEW" })
-          .where(eq(careActions.id, row.action.id)),
-        ctx.db.insert(actionEvents).values({
+          .where(and(eq(careActions.id, row.action.id), eq(careActions.status, row.action.status)))
+          .returning({ id: careActions.id });
+        if (!updated) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "This test was already completed or submitted.",
+          });
+        }
+        await tx.insert(actionEvents).values({
+          id: crypto.randomUUID(),
+          careActionId: row.action.id,
+          patientId: row.patient.id,
+          eventType: "completed",
+          createdBy: "patient",
+          notes: "Patient completed the test and returned report metadata.",
+        });
+        await tx.insert(actionEvents).values({
           id: crypto.randomUUID(),
           careActionId: row.action.id,
           patientId: row.patient.id,
           eventType: "review_started",
           createdBy: "patient",
           notes: "Patient uploaded a report for Provider review.",
-        }),
-      ]);
+        });
+      });
       return { reportId, actionId: row.action.id, status: "AWAITING_REVIEW" as const };
     }),
   }),
   document: router({
     create: providerProcedure.input(documentInputSchema).mutation(async ({ ctx, input }) => {
+      await assertProviderPatientAccess(ctx.db, ctx.user.id, input.patientId);
       const patient = await ctx.db.query.patients.findFirst({
         where: (record, { eq }) => eq(record.id, input.patientId),
       });
@@ -676,6 +991,7 @@ export const appRouter = router({
             message: "The source document could not be found.",
           });
         }
+        await assertProviderPatientAccess(ctx.db, ctx.user.id, document.patientId);
 
         const patient = await ctx.db.query.patients.findFirst({
           where: (record, { eq }) => eq(record.id, document.patientId),
@@ -701,7 +1017,14 @@ export const appRouter = router({
           });
         }
 
-        const carePlanId = crypto.randomUUID();
+        const existingPlan = await ctx.db.query.carePlans.findFirst({
+          where: and(
+            eq(carePlans.providerId, ctx.user.id),
+            eq(carePlans.sourceDocumentId, document.id),
+            eq(carePlans.status, "draft"),
+          ),
+        });
+        const carePlanId = existingPlan?.id ?? crypto.randomUUID();
         const createdAt = new Date();
         const actions = extracted.map((action) => ({
           id: crypto.randomUUID(),
@@ -721,16 +1044,21 @@ export const appRouter = router({
           payload: {},
           createdAt,
         }));
-        await ctx.db.batch([
-          ctx.db.insert(carePlans).values({
-            id: carePlanId,
-            patientId: document.patientId,
-            providerId: ctx.user.id,
-            status: "draft",
-            createdAt,
-          }),
-          ctx.db.insert(careActions).values(actions),
-        ]);
+        await ctx.db.transaction(async (tx) => {
+          if (existingPlan) {
+            await tx.delete(careActions).where(eq(careActions.carePlanId, carePlanId));
+          } else {
+            await tx.insert(carePlans).values({
+              id: carePlanId,
+              patientId: document.patientId,
+              providerId: ctx.user.id,
+              sourceDocumentId: document.id,
+              status: "draft",
+              createdAt,
+            });
+          }
+          await tx.insert(careActions).values(actions);
+        });
 
         return {
           document: {
@@ -758,7 +1086,12 @@ export const appRouter = router({
   }),
   carePlan: carePlanRouter,
   provider: router({
-    dashboard: providerProcedure.query(({ ctx }) => buildProviderDashboard(ctx.db)),
+    dashboard: providerProcedure.query(({ ctx }) => buildProviderDashboard(ctx.db, ctx.user.id)),
+    patientOverview: providerProcedure
+      .input(patientIdSchema)
+      .query(({ ctx, input }) =>
+        buildProviderPatientOverview(ctx.db, ctx.user.id, input.patientId),
+      ),
     reportDetails: providerProcedure
       .input(z.object({ reportId: z.string().uuid() }))
       .query(async ({ ctx, input }) => {
@@ -845,43 +1178,45 @@ export const appRouter = router({
       const communication =
         input.comment?.trim() ||
         "Provider reviewed the report and communicated that no additional note was required.";
-      const reportUpdate = ctx.db
-        .update(reports)
-        .set({
-          status: "REVIEWED",
-          providerComment: input.comment,
-          reviewedAt,
-        })
-        .where(eq(reports.id, row.report.id));
-      const actionUpdate = ctx.db
-        .update(careActions)
-        .set({ status: "CLOSED", nextStepCommunicated: true })
-        .where(eq(careActions.id, row.action.id));
-      const reviewEvent = ctx.db.insert(actionEvents).values({
-        id: crypto.randomUUID(),
-        careActionId: row.action.id,
-        patientId: row.patient.id,
-        eventType: "reviewed",
-        createdBy: "provider",
-        notes: communication,
-      });
-      const closeEvent = ctx.db.insert(actionEvents).values({
-        id: crypto.randomUUID(),
-        careActionId: row.action.id,
-        patientId: row.patient.id,
-        eventType: "closed",
-        createdBy: "provider",
-        notes: "Loop closed after completion, review, and next-step communication.",
-      });
-
       let followUpId: string | null = null;
-      if (input.followUp) {
-        followUpId = crypto.randomUUID();
-        await ctx.db.batch([
-          reportUpdate,
-          actionUpdate,
-          reviewEvent,
-          ctx.db.insert(careActions).values({
+      await ctx.db.transaction(async (tx) => {
+        const [updatedReport] = await tx
+          .update(reports)
+          .set({
+            status: "REVIEWED",
+            providerComment: input.comment,
+            reviewedAt,
+          })
+          .where(and(eq(reports.id, row.report.id), eq(reports.status, "AWAITING_REVIEW")))
+          .returning({ id: reports.id });
+        if (!updatedReport) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "This report has already been reviewed.",
+          });
+        }
+        const [updatedAction] = await tx
+          .update(careActions)
+          .set({ status: "CLOSED", nextStepCommunicated: true })
+          .where(and(eq(careActions.id, row.action.id), eq(careActions.status, "AWAITING_REVIEW")))
+          .returning({ id: careActions.id });
+        if (!updatedAction) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "This Care action was already updated.",
+          });
+        }
+        await tx.insert(actionEvents).values({
+          id: crypto.randomUUID(),
+          careActionId: row.action.id,
+          patientId: row.patient.id,
+          eventType: "reviewed",
+          createdBy: "provider",
+          notes: communication,
+        });
+        if (input.followUp) {
+          followUpId = crypto.randomUUID();
+          await tx.insert(careActions).values({
             id: followUpId,
             carePlanId: row.plan.id,
             parentActionId: row.action.id,
@@ -895,20 +1230,25 @@ export const appRouter = router({
             reviewRequired: input.followUp.reviewRequired,
             verified: true,
             payload: input.followUp.payload,
-          }),
-          ctx.db.insert(actionEvents).values({
+          });
+          await tx.insert(actionEvents).values({
             id: crypto.randomUUID(),
             careActionId: followUpId,
             patientId: row.patient.id,
             eventType: "follow_up_created",
             createdBy: "provider",
             notes: "Provider created a follow-up while reviewing the report.",
-          }),
-          closeEvent,
-        ]);
-      } else {
-        await ctx.db.batch([reportUpdate, actionUpdate, reviewEvent, closeEvent]);
-      }
+          });
+        }
+        await tx.insert(actionEvents).values({
+          id: crypto.randomUUID(),
+          careActionId: row.action.id,
+          patientId: row.patient.id,
+          eventType: "closed",
+          createdBy: "provider",
+          notes: "Loop closed after completion, review, and next-step communication.",
+        });
+      });
 
       return {
         reportId: row.report.id,
@@ -970,33 +1310,31 @@ export const appRouter = router({
         }
 
         const followUpId = crypto.randomUUID();
-        const insertFollowUp = ctx.db.insert(careActions).values({
-          id: followUpId,
-          carePlanId: plan.id,
-          parentActionId: parent?.id,
-          type: "FOLLOW_UP",
-          title: input.action.title,
-          instructions: input.action.instructions,
-          dueDate: input.action.dueDate ? new Date(input.action.dueDate) : undefined,
-          priority: input.action.priority,
-          sourceText: input.action.sourceText,
-          assignedTo: input.action.assignedTo,
-          reviewRequired: input.action.reviewRequired,
-          verified: true,
-          payload: input.action.payload,
-        });
-        const followUpEvent = ctx.db.insert(actionEvents).values({
-          id: crypto.randomUUID(),
-          careActionId: followUpId,
-          patientId: plan.patientId,
-          eventType: "follow_up_created",
-          createdBy: "provider",
-          notes: "Provider communicated and created a follow-up Care action.",
-        });
-
-        if (!parent) {
-          await ctx.db.batch([insertFollowUp, followUpEvent]);
-        } else {
+        await ctx.db.transaction(async (tx) => {
+          await tx.insert(careActions).values({
+            id: followUpId,
+            carePlanId: plan.id,
+            parentActionId: parent?.id,
+            type: "FOLLOW_UP",
+            title: input.action.title,
+            instructions: input.action.instructions,
+            dueDate: input.action.dueDate ? new Date(input.action.dueDate) : undefined,
+            priority: input.action.priority,
+            sourceText: input.action.sourceText,
+            assignedTo: input.action.assignedTo,
+            reviewRequired: input.action.reviewRequired,
+            verified: true,
+            payload: input.action.payload,
+          });
+          await tx.insert(actionEvents).values({
+            id: crypto.randomUUID(),
+            careActionId: followUpId,
+            patientId: plan.patientId,
+            eventType: "follow_up_created",
+            createdBy: "provider",
+            notes: "Provider communicated and created a follow-up Care action.",
+          });
+          if (!parent) return;
           const shouldClose =
             parent.status !== "CLOSED" &&
             canCloseAction({
@@ -1004,7 +1342,7 @@ export const appRouter = router({
               reviewRequired: parent.reviewRequired,
               nextStepCommunicated: true,
             });
-          const parentUpdate = ctx.db
+          await tx
             .update(careActions)
             .set({
               nextStepCommunicated: true,
@@ -1012,28 +1350,62 @@ export const appRouter = router({
             })
             .where(eq(careActions.id, parent.id));
           if (shouldClose) {
-            await ctx.db.batch([
-              insertFollowUp,
-              followUpEvent,
-              parentUpdate,
-              ctx.db.insert(actionEvents).values({
-                id: crypto.randomUUID(),
-                careActionId: parent.id,
-                patientId: plan.patientId,
-                eventType: "closed",
-                createdBy: "provider",
-                notes: "Loop closed after the Provider communicated the follow-up.",
-              }),
-            ]);
-          } else {
-            await ctx.db.batch([insertFollowUp, followUpEvent, parentUpdate]);
+            await tx.insert(actionEvents).values({
+              id: crypto.randomUUID(),
+              careActionId: parent.id,
+              patientId: plan.patientId,
+              eventType: "closed",
+              createdBy: "provider",
+              notes: "Loop closed after the Provider communicated the follow-up.",
+            });
           }
-        }
+        });
 
         return { id: followUpId, carePlanId: plan.id, parentActionId: parent?.id ?? null };
       }),
+    resolveHelpRequest: providerProcedure
+      .input(
+        z.object({
+          eventId: z.string().uuid(),
+          resolution: z.string().trim().min(1).max(1_000),
+        }),
+      )
+      .mutation(async ({ ctx, input }) => {
+        const request = await ctx.db.query.actionEvents.findFirst({
+          where: eq(actionEvents.id, input.eventId),
+        });
+        if (request?.eventType !== "help_requested" || !request.patientId) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Support request not found." });
+        }
+        await assertProviderPatientAccess(ctx.db, ctx.user.id, request.patientId);
+        if (request.careActionId) {
+          const [owned] = await ctx.db
+            .select({ id: careActions.id })
+            .from(careActions)
+            .innerJoin(carePlans, eq(careActions.carePlanId, carePlans.id))
+            .where(
+              and(eq(careActions.id, request.careActionId), eq(carePlans.providerId, ctx.user.id)),
+            )
+            .limit(1);
+          if (!owned) {
+            throw new TRPCError({
+              code: "FORBIDDEN",
+              message: "Support request is not assigned to you.",
+            });
+          }
+        }
+        await ctx.db.insert(actionEvents).values({
+          id: crypto.randomUUID(),
+          careActionId: request.careActionId,
+          patientId: request.patientId,
+          eventType: "help_resolved",
+          createdBy: "provider",
+          notes: input.resolution,
+        });
+        return { eventId: request.id, resolved: true };
+      }),
     listCareGaps: providerProcedure.input(careGapListSchema).query(async ({ ctx, input }) => {
-      const dashboard = await buildProviderDashboard(ctx.db, input?.patientId);
+      const dashboard = await buildProviderDashboard(ctx.db, ctx.user.id, input?.patientId);
       return dashboard.items.flatMap((item) =>
         item.gaps.map((gap) => ({
           ...gap,

@@ -3,7 +3,6 @@ import {
   AlertTriangle,
   ArrowLeft,
   CalendarDays,
-  ClipboardPen,
   LoaderCircle,
   Plus,
   Quote,
@@ -25,14 +24,9 @@ import {
   SelectValue,
 } from "../../components/ui/select";
 import { Textarea } from "../../components/ui/textarea";
-import {
-  type ExtractionHandoffAction,
-  loadExtractionHandoff,
-  saveExtractionHandoff,
-} from "../../lib/extraction-handoff";
 import { trpc } from "../../lib/trpc";
 
-type ActionType = ExtractionHandoffAction["type"];
+type ActionType = "MEDICATION" | "TEST" | "REFERRAL" | "FOLLOW_UP";
 type Priority = "NORMAL" | "URGENT";
 
 const actionLabels: Record<ActionType, string> = {
@@ -110,38 +104,18 @@ const toServerAction = (action: EditableAction) => ({
 
 export function ProviderVerifyPage() {
   const { patientId } = useParams({ from: "/provider/patients/$patientId/verify" });
-  const { carePlanId, manual } = useSearch({ from: "/provider/patients/$patientId/verify" });
+  const { carePlanId } = useSearch({ from: "/provider/patients/$patientId/verify" });
   const navigate = useNavigate();
-
-  const handoff = useMemo(
-    () => (carePlanId ? loadExtractionHandoff(carePlanId) : null),
-    [carePlanId],
-  );
 
   const draftQuery = trpc.carePlan.getDraft.useQuery(
     { carePlanId: carePlanId ?? "" },
-    { enabled: !handoff && Boolean(carePlanId) },
+    { enabled: Boolean(carePlanId) },
   );
 
-  const commitDraft = trpc.carePlan.commitDraft.useMutation();
   const verifyMutation = trpc.carePlan.verify.useMutation();
   const activateMutation = trpc.carePlan.activate.useMutation();
 
   const initialActions = useMemo<EditableAction[]>(() => {
-    if (handoff) {
-      return handoff.actions.map((action) =>
-        editableFromAction({
-          type: action.type,
-          title: action.title,
-          instructions: action.instructions,
-          dueDate: action.dueDate,
-          priority: action.priority,
-          sourceText: action.sourceText,
-          assignedTo: action.assignedTo,
-          reviewRequired: action.reviewRequired,
-        }),
-      );
-    }
     if (draftQuery.data) {
       return draftQuery.data.actions.map((action) =>
         editableFromAction({
@@ -157,47 +131,16 @@ export function ProviderVerifyPage() {
       );
     }
     return [];
-  }, [handoff, draftQuery.data]);
+  }, [draftQuery.data]);
 
   const [actions, setActions] = useState<EditableAction[]>(initialActions);
-  const [committedCarePlanId, setCommittedCarePlanId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setActions(initialActions);
   }, [initialActions]);
 
-  if (manual) {
-    return (
-      <Card className="mx-auto max-w-2xl p-7 text-center sm:p-10">
-        <div className="mx-auto grid size-14 place-items-center rounded-2xl bg-gate/10 text-gate">
-          <ClipboardPen className="size-6" />
-        </div>
-        <Badge variant="gate" className="mt-5">
-          Human gate
-        </Badge>
-        <h1 className="mt-4 text-3xl font-bold text-primary-ink">Manual Care action entry</h1>
-        <p className="mt-3 text-sm leading-6 text-muted">
-          The extraction failure created no Care plan. Manual action editing and activation arrive
-          in ISSUE-005; return to the source document now to preserve this safety boundary.
-        </p>
-        <Button
-          className="mt-6"
-          onClick={() =>
-            navigate({
-              to: "/provider/patients/$patientId/document",
-              params: { patientId },
-            })
-          }
-        >
-          <ArrowLeft className="size-4" />
-          Return to source document
-        </Button>
-      </Card>
-    );
-  }
-
-  if (!handoff && !draftQuery.data && (carePlanId || draftQuery.isError)) {
+  if (!draftQuery.data && (carePlanId || draftQuery.isError)) {
     return (
       <Card className="mx-auto max-w-2xl p-7 text-center sm:p-10">
         <div className="mx-auto grid size-14 place-items-center rounded-2xl bg-warning/10 text-warning">
@@ -210,8 +153,8 @@ export function ProviderVerifyPage() {
           This draft is no longer available
         </h1>
         <p className="mt-3 text-sm leading-6 text-muted">
-          The extraction handoff has expired or the plan was not found. Return to the source
-          document and run extraction again.
+          The persisted draft was not found or is not available to this Provider. Return to the
+          source document and create it again.
         </p>
         <Button
           className="mt-6"
@@ -229,9 +172,9 @@ export function ProviderVerifyPage() {
     );
   }
 
-  const patientName = handoff?.patient.name ?? "the Patient";
-  const documentType = handoff?.document.documentType ?? "discharge_summary";
-  const sourceContent = handoff?.document.content ?? draftQuery.data?.sourceContent ?? "";
+  const patientName = draftQuery.data?.patient.name ?? "the Patient";
+  const documentType = draftQuery.data?.documentType ?? "source_document";
+  const sourceContent = draftQuery.data?.sourceContent ?? "";
 
   const updateAction = <Key extends keyof EditableAction>(
     key: string,
@@ -283,48 +226,10 @@ export function ProviderVerifyPage() {
       return;
     }
     setError(null);
-
-    if (handoff && (!committedCarePlanId || !draftQuery.data)) {
-      const nextActions = actions.map((action) => ({
-        ...action,
-        id: crypto.randomUUID(),
-        status: "PENDING" as const,
-        verified: false as const,
-        createdAt: new Date().toISOString(),
-        carePlanId: handoff.carePlan.id,
-      }));
-      const payload = {
-        ...handoff,
-        actions: nextActions,
-      };
-      try {
-        const result = await commitDraft.mutateAsync(payload);
-        saveExtractionHandoff({
-          ...handoff,
-          carePlan: {
-            id: result.plan.id,
-            patientId: result.plan.patientId,
-            providerId: result.plan.providerId,
-            status: "verified" as const,
-            createdAt: result.plan.createdAt.toString(),
-          },
-        });
-        setCommittedCarePlanId(result.plan.id);
-        await draftQuery.refetch();
-      } catch (mutationError) {
-        setError(
-          mutationError instanceof Error
-            ? mutationError.message
-            : "The care plan could not be saved.",
-        );
-      }
-      return;
-    }
-
-    if (committedCarePlanId ?? carePlanId) {
+    if (carePlanId) {
       try {
         await verifyMutation.mutateAsync({
-          carePlanId: committedCarePlanId ?? carePlanId ?? "",
+          carePlanId,
           actions: actions.map(toServerAction),
         });
         await draftQuery.refetch();
@@ -344,14 +249,14 @@ export function ProviderVerifyPage() {
       setError(validationError);
       return;
     }
-    if (!committedCarePlanId && !carePlanId) {
+    if (!carePlanId) {
       setError("Save the verification first, then activate the care journey.");
       return;
     }
     setError(null);
     try {
       await activateMutation.mutateAsync({
-        carePlanId: committedCarePlanId ?? carePlanId ?? "",
+        carePlanId,
       });
       await navigate({ to: "/provider/dashboard" });
     } catch (mutationError) {
@@ -363,10 +268,9 @@ export function ProviderVerifyPage() {
     }
   };
 
-  const planIsVerified =
-    draftQuery.data?.plan.status === "verified" || Boolean(committedCarePlanId);
+  const planIsVerified = draftQuery.data?.plan.status === "verified";
   const planIsActive = draftQuery.data?.plan.status === "active";
-  const saving = commitDraft.isPending || verifyMutation.isPending;
+  const saving = verifyMutation.isPending;
   const activating = activateMutation.isPending;
   const source = sourceContent.replace(/\s+/g, " ").trim().toLowerCase();
   const sourceMatchByAction = actions.map((action) =>

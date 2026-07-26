@@ -19,11 +19,7 @@ export const protectedProcedure = t.procedure.use(({ ctx, next }) => {
 });
 
 export const providerProcedure = protectedProcedure.use(({ ctx, next }) => {
-  if (
-    ctx.user.role !== "provider" &&
-    ctx.user.role !== "hospital_admin" &&
-    ctx.user.role !== "pharmacy_admin"
-  ) {
+  if (ctx.user.role !== "hospital_admin" && ctx.user.role !== "pharmacy_admin") {
     throw new TRPCError({
       code: "FORBIDDEN",
       message: "This workspace is available to care providers.",
@@ -41,4 +37,11 @@ export const superAdminProcedure = protectedProcedure.use(({ ctx, next }) => {
   return next({
     ctx,
   });
+});
+
+export const patientProcedure = protectedProcedure.use(({ ctx, next }) => {
+  if (ctx.user.role !== "patient" || !ctx.user.patientId) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Access restricted to Patients." });
+  }
+  return next({ ctx });
 });

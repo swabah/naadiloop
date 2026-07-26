@@ -29,20 +29,20 @@ export function AdminApprovalsPage() {
 
   if (user && user.role !== "super_admin") {
     return (
-      <div className="mx-auto max-w-xl py-20 text-center">
-        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-red-100 text-red-700 mb-4">
-          <ShieldAlert className="w-8 h-8" />
+      <div className="app-panel mx-auto max-w-xl rounded-3xl px-6 py-16 text-center">
+        <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-2xl bg-danger/10 text-danger">
+          <ShieldAlert className="size-7" />
         </div>
-        <h1 className="text-2xl font-bold text-gray-900">Access Restricted</h1>
-        <p className="mt-2 text-sm text-gray-600">
+        <h1 className="text-2xl font-bold text-primary-ink">Access restricted</h1>
+        <p className="mt-2 text-sm text-muted">
           This portal is reserved for Super Admin users only.
         </p>
         <div className="mt-6">
           <Link
             to="/login"
-            className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white shadow hover:bg-primary-ink"
+            className="inline-flex h-11 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-bold text-white shadow-sm transition hover:bg-[#1d55d8]"
           >
-            Switch Account
+            Switch account
           </Link>
         </div>
       </div>
@@ -50,18 +50,18 @@ export function AdminApprovalsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl py-10 px-4">
+    <div className="mx-auto max-w-6xl">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8 border-b border-gray-200 pb-6">
+      <div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
-          <div className="inline-flex items-center gap-2 rounded-full bg-purple-100 px-3 py-1 text-xs font-semibold text-purple-800 mb-2">
+          <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-gate/10 px-3 py-1.5 text-xs font-bold text-gate">
             <ShieldCheck className="w-3.5 h-3.5" />
-            Super Admin Portal
+            Super Admin portal
           </div>
-          <h1 className="text-3xl font-extrabold text-primary-ink font-display">
-            Pending Administration Approvals
+          <h1 className="text-3xl font-extrabold text-primary-ink sm:text-4xl">
+            Workspace approvals
           </h1>
-          <p className="mt-1 text-sm text-muted">
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">
             Review and approve registered Hospitals and Pharmacies before granting platform access.
           </p>
         </div>
@@ -70,28 +70,33 @@ export function AdminApprovalsPage() {
           <button
             type="button"
             onClick={() => pendingQuery.refetch()}
-            className="rounded-xl border border-gray-300 px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 shadow-sm"
+            className="h-11 rounded-2xl border border-border bg-white px-4 text-xs font-bold text-primary-ink shadow-sm transition hover:border-primary/25 hover:bg-primary-soft/40"
           >
-            Refresh List
+            Refresh list
           </button>
         </div>
       </div>
 
       {/* Content State */}
+      {approveMutation.isError ? (
+        <div className="mb-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          Approval update failed: {approveMutation.error.message}
+        </div>
+      ) : null}
       {pendingQuery.isLoading ? (
         <div className="py-20 text-center text-sm text-muted">
-          Loading pending administration applications...
+          Loading pending workspace applications…
         </div>
       ) : pendingQuery.isError ? (
         <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          Failed to load pending approvals: {pendingQuery.error.message}
+          Could not load pending approvals: {pendingQuery.error.message}
         </div>
       ) : !pendingQuery.data || pendingQuery.data.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-gray-300 bg-gray-50/50 py-16 text-center">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-teal-100 text-teal-700 mb-3">
-            <CheckCircle className="w-6 h-6" />
+        <div className="app-panel rounded-[2rem] border-dashed py-16 text-center">
+          <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-2xl bg-success/10 text-success-ink">
+            <CheckCircle className="size-6" />
           </div>
-          <h3 className="text-lg font-bold text-gray-900">All Applications Processed</h3>
+          <h3 className="text-lg font-bold text-primary-ink">All applications processed</h3>
           <p className="mt-1 text-sm text-muted">
             There are no pending administration registration requests at this time.
           </p>
@@ -101,12 +106,12 @@ export function AdminApprovalsPage() {
           {pendingQuery.data.map((item) => (
             <div
               key={item.id}
-              className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm hover:shadow-md transition-shadow"
+              className="app-panel rounded-[1.75rem] p-5 transition hover:-translate-y-0.5 hover:shadow-lg sm:p-6"
             >
-              <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-6">
+              <div className="flex flex-col justify-between gap-6 lg:flex-row lg:items-start">
                 {/* Info Column */}
-                <div className="space-y-4 flex-1">
-                  <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex-1 space-y-4">
+                  <div className="flex flex-wrap items-center gap-3">
                     <span
                       className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wider ${
                         item.role === "hospital_admin"
@@ -129,19 +134,19 @@ export function AdminApprovalsPage() {
                   </div>
 
                   <div>
-                    <h2 className="text-xl font-bold text-gray-900">
+                    <h2 className="text-xl font-bold text-primary-ink">
                       {item.organization?.orgName || item.name}
                     </h2>
-                    <p className="text-xs text-muted font-mono mt-0.5">
+                    <p className="mt-0.5 font-mono text-xs text-muted">
                       License / Reg No: {item.organization?.licenseNumber || "N/A"}
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-gray-700 bg-gray-50 rounded-xl p-3.5">
+                  <div className="grid grid-cols-1 gap-3 rounded-2xl bg-primary-soft/35 p-4 text-xs text-text sm:grid-cols-2">
                     <div className="flex items-center gap-2">
                       <User className="w-4 h-4 text-muted shrink-0" />
                       <span>
-                        <span className="font-semibold text-gray-900">Admin:</span> {item.name} (
+                        <span className="font-semibold text-primary-ink">Admin:</span> {item.name} (
                         {item.email})
                       </span>
                     </div>
@@ -149,7 +154,7 @@ export function AdminApprovalsPage() {
                     <div className="flex items-center gap-2">
                       <MapPin className="w-4 h-4 text-muted shrink-0" />
                       <span>
-                        <span className="font-semibold text-gray-900">Address:</span>{" "}
+                        <span className="font-semibold text-primary-ink">Address:</span>{" "}
                         {[
                           item.organization?.address,
                           item.organization?.city,
@@ -164,12 +169,12 @@ export function AdminApprovalsPage() {
                 </div>
 
                 {/* Actions */}
-                <div className="flex sm:flex-row lg:flex-col items-stretch gap-3 min-w-[160px] justify-end">
+                <div className="flex min-w-40 items-stretch justify-end gap-3 sm:flex-row lg:flex-col">
                   <button
                     type="button"
                     disabled={approveMutation.isPending}
                     onClick={() => approveMutation.mutate({ userId: item.id, action: "approve" })}
-                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white shadow hover:bg-teal-700 transition-colors disabled:opacity-50"
+                    className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-white shadow-sm transition hover:bg-[#1d55d8] disabled:opacity-50"
                   >
                     <CheckCircle className="w-4 h-4" />
                     Approve
@@ -179,7 +184,7 @@ export function AdminApprovalsPage() {
                     type="button"
                     disabled={approveMutation.isPending}
                     onClick={() => approveMutation.mutate({ userId: item.id, action: "reject" })}
-                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-200 bg-white px-4 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+                    className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-danger/20 bg-white px-4 text-sm font-bold text-danger transition-colors hover:bg-danger/5 disabled:opacity-50"
                   >
                     <XCircle className="w-4 h-4" />
                     Reject

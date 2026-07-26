@@ -2,7 +2,6 @@ import { Link, useParams } from "@tanstack/react-router";
 import {
   ArrowLeft,
   CheckCircle2,
-  ExternalLink,
   FileCheck2,
   LoaderCircle,
   Plus,
@@ -32,6 +31,9 @@ export function ProviderReportPage() {
       await Promise.all([
         utils.provider.dashboard.invalidate(),
         utils.provider.reportDetails.invalidate({ reportId }),
+        details.data?.patient.id
+          ? utils.provider.patientOverview.invalidate({ patientId: details.data.patient.id })
+          : Promise.resolve(),
         utils.patient.nextAction.invalidate(),
         utils.patient.journey.invalidate(),
       ]);
@@ -92,9 +94,19 @@ export function ProviderReportPage() {
           Completion, Provider review, and next-step communication were recorded together.
           {review.data.followUpId ? " The new follow-up is now visible to the Patient." : ""}
         </p>
-        <Button asChild className="mt-6">
-          <Link to="/provider/dashboard">Return to dashboard</Link>
-        </Button>
+        <div className="mt-6 flex flex-wrap justify-center gap-3">
+          <Button asChild>
+            <Link
+              to="/provider/patients/$patientId"
+              params={{ patientId: details.data.patient.id }}
+            >
+              Return to Patient workspace
+            </Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link to="/provider/dashboard">Open dashboard</Link>
+          </Button>
+        </div>
       </Card>
     );
   }
@@ -111,7 +123,9 @@ export function ProviderReportPage() {
           {report.providerComment || "No optional Provider comment was added."}
         </p>
         <Button asChild className="mt-6">
-          <Link to="/provider/dashboard">Return to dashboard</Link>
+          <Link to="/provider/patients/$patientId" params={{ patientId: patient.id }}>
+            Return to Patient workspace
+          </Link>
         </Button>
       </Card>
     );
@@ -120,9 +134,9 @@ export function ProviderReportPage() {
   return (
     <section className="space-y-6">
       <Button asChild variant="ghost" className="px-0">
-        <Link to="/provider/dashboard">
+        <Link to="/provider/patients/$patientId" params={{ patientId: patient.id }}>
           <ArrowLeft className="size-4" />
-          Back to dashboard
+          Back to Patient workspace
         </Link>
       </Button>
       <div>
@@ -137,13 +151,11 @@ export function ProviderReportPage() {
         <Card className="p-6">
           <FileCheck2 className="size-8 text-gate" />
           <h2 className="mt-4 text-lg font-bold text-primary-ink">Returned demo report</h2>
-          <p className="mt-2 break-all text-sm leading-6 text-muted">{report.fileUrl}</p>
-          <Button asChild variant="outline" className="mt-5">
-            <a href={report.fileUrl} target="_blank" rel="noreferrer">
-              Open report link
-              <ExternalLink className="size-4" />
-            </a>
-          </Button>
+          <p className="mt-2 break-all text-sm font-semibold text-primary-ink">{report.fileName}</p>
+          <p className="mt-1 text-xs text-muted">
+            {report.fileType} · {Math.max(1, Math.round(report.fileSize / 1_024))} KB ·
+            metadata-only demo
+          </p>
           <blockquote className="mt-6 rounded-2xl bg-primary-soft/60 p-4 text-sm leading-6 text-primary-ink">
             {action.sourceText}
           </blockquote>

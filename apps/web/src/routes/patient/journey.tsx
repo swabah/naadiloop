@@ -28,9 +28,9 @@ export function PatientJourneyPage() {
     return (
       <Card className="p-8 text-center">
         <Circle className="mx-auto size-8 text-primary" />
-        <h1 className="mt-4 text-2xl font-bold text-primary-ink">Select the Patient demo view</h1>
+        <h1 className="mt-4 text-2xl font-bold text-primary-ink">Patient profile unavailable</h1>
         <p className="mt-2 text-sm text-muted">
-          The Patient timeline is available only in the Patient demo view.
+          Sign in with an active Patient account to view the Care timeline.
         </p>
       </Card>
     );
