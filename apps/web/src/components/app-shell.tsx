@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   LogIn,
   LogOut,
+  QrCode,
   ShieldCheck,
   UserPlus,
   UsersRound,
@@ -22,6 +23,7 @@ interface NavItem {
   to:
     | "/patient/next"
     | "/patient/journey"
+    | "/patient/profile"
     | "/provider/dashboard"
     | "/provider/patients"
     | "/admin/approvals";
@@ -33,6 +35,7 @@ function navItemsFor(user: AuthUser): NavItem[] {
     return [
       { label: "Home", to: "/patient/next", icon: HeartPulse },
       { label: "Journey", to: "/patient/journey", icon: ClipboardList },
+      { label: "Profile & QR", to: "/patient/profile", icon: QrCode },
     ];
   }
   if (user.role === "super_admin") {

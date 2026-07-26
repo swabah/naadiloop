@@ -30,6 +30,10 @@ const PatientNextPage = lazyRouteComponent(
   () => import("./routes/patient/next"),
   "PatientNextPage",
 );
+const PatientProfilePage = lazyRouteComponent(
+  () => import("./routes/patient/profile"),
+  "PatientProfilePage",
+);
 const PatientReportPage = lazyRouteComponent(
   () => import("./routes/patient/report"),
   "PatientReportPage",
@@ -148,6 +152,12 @@ const patientJourneyRoute = createRoute({
   component: PatientJourneyPage,
 });
 
+const patientProfileRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/patient/profile",
+  component: PatientProfilePage,
+});
+
 const patientActionRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/patient/actions/$actionId",
@@ -200,6 +210,7 @@ const routeTree = rootRoute.addChildren([
   providerReportRoute,
   patientNextRoute,
   patientJourneyRoute,
+  patientProfileRoute,
   patientActionRoute,
   patientReportRoute,
   patientHelpRoute,

@@ -13,6 +13,7 @@ import {
   UsersRound,
 } from "lucide-react";
 import { type FormEvent, useState } from "react";
+import { UhidQrScanner } from "../../components/uhid-qr-scanner";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
@@ -70,6 +71,13 @@ export function ProviderPatientsPage() {
     linkPatient.reset();
   };
 
+  const useScannedUhid = (uhid: string) => {
+    linkPatient.reset();
+    setUhidInput(uhid);
+    setLookupUhid(uhid);
+    setOtp("");
+  };
+
   const searchPatient = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     linkPatient.reset();
@@ -122,6 +130,14 @@ export function ProviderPatientsPage() {
                 registered phone.
               </DialogDescription>
             </DialogHeader>
+
+            <UhidQrScanner onDetected={useScannedUhid} />
+
+            <div className="flex items-center gap-3 text-[0.65rem] font-bold uppercase tracking-[0.14em] text-muted">
+              <span className="h-px flex-1 bg-border" />
+              or enter manually
+              <span className="h-px flex-1 bg-border" />
+            </div>
 
             <form className="space-y-4" onSubmit={searchPatient}>
               <label className="space-y-2" htmlFor="patient-uhid">
