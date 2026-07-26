@@ -207,3 +207,57 @@ test("UHID default protects Patient registration when an older server omits the 
     await db.close();
   }
 });
+
+test("action-events repair migration restores dashboard event queries after schema drift", async () => {
+  const db = new PGlite();
+  const migrationPath = fileURLToPath(
+    new URL("../migrations/0005_repair_action_events.sql", import.meta.url),
+  );
+
+  try {
+    await db.exec(`
+      CREATE TYPE event_type AS ENUM (
+        'created',
+        'verified',
+        'activated',
+        'completed',
+        'skipped',
+        'reminder_requested',
+        'help_requested',
+        'review_started',
+        'reviewed',
+        'closed',
+        'follow_up_created',
+        'help_resolved'
+      );
+      CREATE TABLE patients (id uuid PRIMARY KEY);
+      CREATE TABLE care_actions (id uuid PRIMARY KEY);
+    `);
+    await db.exec(await readFile(migrationPath, "utf8"));
+    await db.exec(`
+      INSERT INTO patients (id)
+      VALUES ('dd15ab44-5441-49b4-b96b-5768e4e5c671');
+      INSERT INTO action_events (patient_id, event_type, created_by, notes)
+      VALUES (
+        'dd15ab44-5441-49b4-b96b-5768e4e5c671',
+        'help_requested',
+        'patient',
+        'Needs help understanding instructions'
+      );
+    `);
+
+    const events = await db.query<{ event_type: string }>(
+      `SELECT event_type
+       FROM action_events
+       WHERE patient_id = 'dd15ab44-5441-49b4-b96b-5768e4e5c671'
+         AND care_action_id IS NULL
+       ORDER BY timestamp DESC, id DESC`,
+    );
+    assert.deepEqual(
+      events.rows.map((event) => event.event_type),
+      ["help_requested"],
+    );
+  } finally {
+    await db.close();
+  }
+});
