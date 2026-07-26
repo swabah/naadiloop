@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
   boolean,
@@ -88,7 +89,10 @@ export interface CaregiverContact {
 
 export const patients = pgTable("patients", {
   id: uuid("id").defaultRandom().primaryKey(),
-  uhid: text("uhid").notNull().unique(),
+  uhid: text("uhid")
+    .default(sql`'UHID-' || upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 10))`)
+    .notNull()
+    .unique(),
   name: text("name").notNull(),
   age: text("age"),
   phone: text("phone"),

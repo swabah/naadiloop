@@ -171,3 +171,39 @@ test("short UHID migration reduces existing Patient identifiers", async () => {
     await db.close();
   }
 });
+
+test("UHID default protects Patient registration when an older server omits the field", async () => {
+  const db = new PGlite();
+  const migrationPath = fileURLToPath(
+    new URL("../migrations/0004_patient_uhid_default.sql", import.meta.url),
+  );
+
+  try {
+    await db.exec(`
+      CREATE TABLE patients (
+        id uuid PRIMARY KEY,
+        uhid text NOT NULL UNIQUE,
+        name text NOT NULL,
+        age text,
+        phone text,
+        language text NOT NULL DEFAULT 'en'
+      );
+    `);
+    await db.exec(await readFile(migrationPath, "utf8"));
+    await db.exec(`
+      INSERT INTO patients (id, name, age, phone, language)
+      VALUES (
+        'c0d64dce-57ee-40c0-b2bd-13da7786ae4a',
+        'Fictional Patient',
+        NULL,
+        '+919876543210',
+        'en'
+      );
+    `);
+
+    const result = await db.query<{ uhid: string }>("SELECT uhid FROM patients");
+    assert.match(result.rows[0]?.uhid ?? "", /^UHID-[A-F0-9]{10}$/);
+  } finally {
+    await db.close();
+  }
+});
