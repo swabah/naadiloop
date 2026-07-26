@@ -115,6 +115,7 @@ async function seed() {
         passwordHash: userPassword,
         name: "Rajan Menon",
         phone: "+91 98765 43210",
+        aadhaarNumber: "999900001234",
         role: "patient",
         status: "active",
       },

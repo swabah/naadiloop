@@ -146,6 +146,7 @@ export const registerInputSchema = z
     phone: z.string().trim().optional(),
     role: z.enum(["patient", "hospital_admin", "pharmacy_admin"]),
     // Patient specific
+    aadhaarNumber: z.string().trim().optional(),
     age: z.string().trim().optional(),
     gender: z.string().trim().optional(),
     language: z.string().trim().default("en"),
@@ -172,7 +173,15 @@ export const registerInputSchema = z
   .refine((data) => data.role !== "patient" || Boolean(data.phone), {
     message: "A phone number is required so a Hospital can request Patient consent.",
     path: ["phone"],
-  });
+  })
+  .refine(
+    (data) =>
+      data.role !== "patient" || /^\d{12}$/.test(data.aadhaarNumber?.replace(/\s/g, "") ?? ""),
+    {
+      message: "12-digit Aadhaar number is required for patient registration",
+      path: ["aadhaarNumber"],
+    },
+  );
 
 export const loginInputSchema = z.object({
   email: z.string().trim().email("Invalid email address"),

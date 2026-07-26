@@ -202,6 +202,7 @@ export const users = pgTable("users", {
   passwordHash: text("password_hash").notNull(),
   name: text("name").notNull(),
   phone: text("phone"),
+  aadhaarNumber: text("aadhaar_number").unique(),
   role: userRole("role").notNull(),
   status: userStatus("status").default("active").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),

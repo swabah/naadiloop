@@ -68,15 +68,53 @@ test("baseline migration creates the reliable-demo schema from an empty database
     assert.equal(reportColumnNames.has("file_type"), true);
     assert.equal(reportColumnNames.has("file_size"), true);
     assert.equal(reportColumnNames.has("file_url"), false);
+  } finally {
+    await db.close();
+  }
+});
 
-    const userColumns = await db.query<{ column_name: string }>(
-      `SELECT column_name
-       FROM information_schema.columns
-       WHERE table_schema = 'public' AND table_name = 'users'`,
+test("Aadhaar migration adds a private, unique, 12-digit Patient identity field", async () => {
+  const db = new PGlite();
+  const migrationPath = fileURLToPath(
+    new URL("../migrations/0003_patient_aadhaar.sql", import.meta.url),
+  );
+
+  try {
+    await db.exec(`
+      CREATE TABLE users (
+        id uuid PRIMARY KEY,
+        email text NOT NULL UNIQUE
+      );
+    `);
+    await db.exec(await readFile(migrationPath, "utf8"));
+    await db.exec(`
+      INSERT INTO users (id, email, aadhaar_number)
+      VALUES (
+        '20000000-0000-4000-8000-000000000001',
+        'first@example.test',
+        '123456789012'
+      );
+    `);
+
+    await assert.rejects(
+      db.exec(`
+        INSERT INTO users (id, email, aadhaar_number)
+        VALUES (
+          '20000000-0000-4000-8000-000000000002',
+          'duplicate@example.test',
+          '123456789012'
+        );
+      `),
     );
-    assert.equal(
-      userColumns.rows.some((row) => row.column_name.toLowerCase().includes("aadhaar")),
-      false,
+    await assert.rejects(
+      db.exec(`
+        INSERT INTO users (id, email, aadhaar_number)
+        VALUES (
+          '20000000-0000-4000-8000-000000000003',
+          'invalid@example.test',
+          '12345'
+        );
+      `),
     );
   } finally {
     await db.close();

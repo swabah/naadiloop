@@ -22,13 +22,14 @@ test("help rejects an untraceable request with neither Patient nor action", () =
   assert.equal(result.success, false);
 });
 
-test("Patient registration requires a phone and does not collect Aadhaar", () => {
+test("Patient registration requires a phone and a 12-digit Aadhaar number", () => {
   assert.equal(
     registerInputSchema.safeParse({
       name: "Fictional Patient",
       email: "patient@example.test",
       password: "password123",
       phone: "+91 90000 00000",
+      aadhaarNumber: "123456789012",
       role: "patient",
     }).success,
     true,
@@ -41,8 +42,24 @@ test("Patient registration rejects a missing consent phone", () => {
       name: "Fictional Patient",
       email: "patient@example.test",
       password: "password123",
+      aadhaarNumber: "123456789012",
       role: "patient",
     }).success,
+    false,
+  );
+});
+
+test("Patient registration rejects a missing or malformed Aadhaar number", () => {
+  const patient = {
+    name: "Fictional Patient",
+    email: "patient@example.test",
+    password: "password123",
+    phone: "+91 90000 00000",
+    role: "patient" as const,
+  };
+  assert.equal(registerInputSchema.safeParse(patient).success, false);
+  assert.equal(
+    registerInputSchema.safeParse({ ...patient, aadhaarNumber: "12345678901" }).success,
     false,
   );
 });

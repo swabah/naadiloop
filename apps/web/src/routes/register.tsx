@@ -24,6 +24,7 @@ export function RegisterPage() {
   const [phone, setPhone] = useState("");
 
   // Patient Form State
+  const [aadhaarNumber, setAadhaarNumber] = useState("");
   const [age, setAge] = useState("");
   const [gender, setGender] = useState("male");
   const [language, setLanguage] = useState("en");
@@ -56,6 +57,11 @@ export function RegisterPage() {
 
     const targetRole = activeTab === "patient" ? "patient" : adminRole;
 
+    if (targetRole === "patient" && !/^\d{12}$/.test(aadhaarNumber)) {
+      setErrorMessage("Enter a valid 12-digit Aadhaar number.");
+      return;
+    }
+
     if (targetRole !== "patient") {
       if (!orgName.trim() || !licenseNumber.trim()) {
         setErrorMessage(
@@ -71,6 +77,7 @@ export function RegisterPage() {
       password,
       phone: phone || undefined,
       role: targetRole,
+      aadhaarNumber: targetRole === "patient" ? aadhaarNumber : undefined,
       age: targetRole === "patient" ? age : undefined,
       gender: targetRole === "patient" ? gender : undefined,
       language: targetRole === "patient" ? language : "en",
@@ -144,6 +151,7 @@ export function RegisterPage() {
                 setName("");
                 setEmail("");
                 setPassword("");
+                setAadhaarNumber("");
               }}
               className="h-11 rounded-xl border border-border bg-white px-5 text-sm font-bold text-primary-ink transition hover:border-primary/25 hover:bg-primary-soft/40"
             >
@@ -294,6 +302,35 @@ export function RegisterPage() {
               <>
                 <hr className="my-4 border-border" />
                 <div className="space-y-4">
+                  <div>
+                    <label
+                      htmlFor="register-aadhaar"
+                      className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted"
+                    >
+                      Aadhaar Number <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      id="register-aadhaar"
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="off"
+                      required
+                      minLength={12}
+                      maxLength={12}
+                      pattern="[0-9]{12}"
+                      placeholder="12-digit Aadhaar number"
+                      value={aadhaarNumber}
+                      onChange={(event) =>
+                        setAadhaarNumber(event.target.value.replace(/\D/g, "").slice(0, 12))
+                      }
+                      aria-describedby="register-aadhaar-help"
+                      className="h-13 w-full rounded-2xl border border-border bg-[#f9faff] px-4 font-mono text-sm font-medium tracking-wider outline-none transition focus:border-primary/55 focus:bg-white focus:ring-4 focus:ring-primary/10"
+                    />
+                    <p id="register-aadhaar-help" className="mt-1.5 text-xs leading-5 text-muted">
+                      Required for Patient registration and never displayed in Patient or Provider
+                      profiles.
+                    </p>
+                  </div>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                       <label

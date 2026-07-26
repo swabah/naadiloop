@@ -475,6 +475,8 @@ export const appRouter = router({
   auth: router({
     register: publicProcedure.input(registerInputSchema).mutation(async ({ ctx, input }) => {
       const email = input.email.toLowerCase();
+      const aadhaarNumber =
+        input.role === "patient" ? input.aadhaarNumber?.replace(/\s/g, "") : undefined;
       const existingUser = await ctx.db.query.users.findFirst({
         where: eq(users.email, email),
       });
@@ -483,6 +485,17 @@ export const appRouter = router({
           code: "CONFLICT",
           message: "An account with this email address already exists.",
         });
+      }
+      if (aadhaarNumber) {
+        const existingAadhaar = await ctx.db.query.users.findFirst({
+          where: eq(users.aadhaarNumber, aadhaarNumber),
+        });
+        if (existingAadhaar) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "A Patient account with this Aadhaar number already exists.",
+          });
+        }
       }
 
       const status = input.role === "patient" ? "active" : "pending_approval";
@@ -494,6 +507,7 @@ export const appRouter = router({
             email,
             passwordHash: await bcrypt.hash(input.password, 10),
             phone: input.phone,
+            aadhaarNumber,
             role: input.role,
             status,
           })

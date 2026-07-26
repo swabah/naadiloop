@@ -30,6 +30,7 @@ try {
     email,
     password: "smoke-password",
     phone: "+91 90000 00001",
+    aadhaarNumber: crypto.randomUUID().replace(/\D/g, "").padEnd(12, "0").slice(0, 12),
     role: "patient",
     age: "40",
     language: "en",
