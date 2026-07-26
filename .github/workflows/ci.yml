@@ -50,16 +50,21 @@ jobs:
           pnpm db:seed
           pnpm --filter @naadi/server start &
           server_pid=$!
-          trap 'kill "$server_pid"' EXIT
+          cleanup() {
+            kill "$server_pid" 2>/dev/null || true
+            wait "$server_pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
           for attempt in {1..20}; do
-            if curl --fail --silent http://localhost:3001/ready >/dev/null; then
+            if curl --fail --show-error --silent http://localhost:3001/ready >/dev/null; then
               break
             fi
             sleep 1
           done
-          curl --fail --silent http://localhost:3001/ready
-          curl --fail --silent \
+          curl --fail --show-error --silent http://localhost:3001/ready >/dev/null
+          curl --fail --show-error --silent \
             --header 'content-type: application/json' \
-            --data '{"json":{"email":"superadmin@naadi.demo","password":"ci-super-admin-password"}}' \
-            http://localhost:3001/trpc/auth.login
+            --data '{"email":"superadmin@naadi.demo","password":"ci-super-admin-password"}' \
+            http://localhost:3001/trpc/auth.login >/dev/null
           pnpm --filter @naadi/api smoke:uhid
+          pnpm --filter @naadi/api smoke:overview
