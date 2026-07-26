@@ -1,24 +1,36 @@
 import { Link } from "@tanstack/react-router";
-import { ArrowRight, CheckCircle2, Circle, Clock3, LockKeyhole, RefreshCw } from "lucide-react";
+import { ArrowLeft, ArrowRight, CheckCircle2, Circle, Clock3, RefreshCw } from "lucide-react";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
 import { actionStateLabels, actionTypeLabels, formatActionDate } from "../../lib/action-display";
 import { trpc } from "../../lib/trpc";
 
+function localDateValue(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export function PatientJourneyPage() {
   const me = trpc.auth.me.useQuery();
   const patientId = me.data?.patientId;
+  const now = new Date();
   const journey = trpc.patient.journey.useQuery(
-    { patientId: patientId ?? "00000000-0000-4000-8000-000000000000" },
-    { enabled: Boolean(patientId), refetchInterval: 5_000 },
+    {
+      patientId: patientId ?? "00000000-0000-4000-8000-000000000000",
+      date: localDateValue(now),
+      timezoneOffsetMinutes: now.getTimezoneOffset(),
+    },
+    { enabled: Boolean(patientId), refetchInterval: 30_000, refetchOnWindowFocus: true },
   );
 
   if (me.isPending || (patientId && journey.isPending)) {
     return (
-      <div className="space-y-4" role="status" aria-label="Loading Care journey">
+      <div className="space-y-4" role="status" aria-label="Loading care journey">
         {[0, 1, 2].map((item) => (
-          <Card className="h-40 animate-pulse bg-white/60" key={item} />
+          <Card className="h-24 animate-pulse bg-white/60" key={item} />
         ))}
       </div>
     );
@@ -30,7 +42,7 @@ export function PatientJourneyPage() {
         <Circle className="mx-auto size-8 text-primary" />
         <h1 className="mt-4 text-2xl font-bold text-primary-ink">Patient profile unavailable</h1>
         <p className="mt-2 text-sm text-muted">
-          Sign in with an active Patient account to view the Care timeline.
+          Sign in with an active Patient account to view the Care journey.
         </p>
       </Card>
     );
@@ -41,7 +53,7 @@ export function PatientJourneyPage() {
       <Card className="p-8 text-center">
         <RefreshCw className="mx-auto size-8 text-warning" />
         <h1 className="mt-4 text-2xl font-bold text-primary-ink">
-          The Care timeline could not be loaded
+          The Care journey could not be loaded
         </h1>
         <Button className="mt-5" onClick={() => void journey.refetch()}>
           Try again
@@ -50,94 +62,122 @@ export function PatientJourneyPage() {
     );
   }
 
-  const progressPercent =
-    journey.data.progress.total === 0
-      ? 0
-      : Math.round((journey.data.progress.completed / journey.data.progress.total) * 100);
+  const groups = [
+    {
+      label: "Active",
+      description: "Needs attention now",
+      actions: journey.data.actions.filter(
+        (action) =>
+          !action.locked && !["completed", "reviewed", "closed"].includes(action.displayState),
+      ),
+    },
+    {
+      label: "Upcoming",
+      description: "Planned next",
+      actions: journey.data.actions.filter((action) => action.locked),
+    },
+    {
+      label: "Completed",
+      description: "Your recorded history",
+      actions: journey.data.actions.filter((action) =>
+        ["completed", "reviewed", "closed"].includes(action.displayState),
+      ),
+    },
+  ];
 
   return (
-    <section className="space-y-7">
-      <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
-        <div>
-          <Badge variant="info">Patient journey</Badge>
-          <h1 className="mt-4 text-3xl font-bold text-primary-ink sm:text-4xl">
-            Your complete Care timeline
-          </h1>
-        </div>
-        <div className="min-w-52">
-          <p className="text-sm font-semibold text-primary-ink">
-            {journey.data.progress.completed} of {journey.data.progress.total} completed
-          </p>
-          <div className="mt-2 h-2 overflow-hidden rounded-full bg-primary-soft">
-            <div className="h-full bg-primary" style={{ width: `${progressPercent}%` }} />
+    <section className="mx-auto max-w-3xl space-y-6">
+      <header>
+        <Button asChild variant="ghost" className="px-0">
+          <Link to="/patient/next">
+            <ArrowLeft className="size-4" />
+            Today
+          </Link>
+        </Button>
+        <div className="mt-3 flex items-end justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight text-primary-ink">Your journey</h1>
+            <p className="mt-1 text-sm text-muted">A simple view of active and completed care.</p>
           </div>
+          <p className="shrink-0 text-sm font-semibold text-primary">
+            {journey.data.progress.completed}/{journey.data.progress.total} complete
+          </p>
         </div>
-      </div>
+      </header>
 
       {journey.data.actions.length === 0 ? (
         <Card className="p-10 text-center">
           <Circle className="mx-auto size-8 text-muted" />
           <h2 className="mt-4 text-xl font-bold text-primary-ink">No active journey yet</h2>
           <p className="mt-2 text-sm text-muted">
-            Only Care actions activated by a Provider appear here.
+            Provider-confirmed Care actions will appear here after activation.
           </p>
         </Card>
       ) : (
-        <ol className="relative space-y-4 before:absolute before:bottom-8 before:left-6 before:top-8 before:w-px before:bg-border sm:before:left-8">
-          {journey.data.actions.map((action) => {
-            const complete = ["completed", "reviewed", "closed"].includes(action.displayState);
-            return (
-              <li key={action.id} className="relative">
-                <Card className={`ml-12 p-5 sm:ml-16 sm:p-6 ${action.locked ? "opacity-70" : ""}`}>
-                  <div
-                    className={`absolute left-2 top-6 z-10 grid size-9 place-items-center rounded-full border-4 border-bg sm:left-4 ${
-                      complete
-                        ? "bg-success text-white"
-                        : action.isOverdue
-                          ? "bg-warning text-white"
-                          : "bg-primary-soft text-primary"
-                    }`}
-                  >
-                    {action.locked ? (
-                      <LockKeyhole className="size-4" />
-                    ) : complete ? (
-                      <CheckCircle2 className="size-4" />
-                    ) : (
-                      <Clock3 className="size-4" />
-                    )}
-                  </div>
-                  <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
-                    <div>
-                      <p className="text-xs font-bold uppercase tracking-wider text-primary">
-                        {actionTypeLabels[action.type]}
-                      </p>
-                      <h2 className="mt-1 text-xl font-bold text-primary-ink">{action.title}</h2>
+        groups.map((group) => {
+          if (group.actions.length === 0) return null;
+          return (
+            <div key={group.label}>
+              <div className="mb-2 flex items-end justify-between">
+                <div>
+                  <h2 className="font-bold text-primary-ink">{group.label}</h2>
+                  <p className="text-xs text-muted">{group.description}</p>
+                </div>
+                <span className="text-xs text-muted">{group.actions.length}</span>
+              </div>
+              <Card className="divide-y divide-border overflow-hidden">
+                {group.actions.map((action) => {
+                  const complete = ["completed", "reviewed", "closed"].includes(
+                    action.displayState,
+                  );
+                  return (
+                    <div className="flex items-center gap-3 p-4" key={action.id}>
+                      <div
+                        className={`grid size-9 shrink-0 place-items-center rounded-full ${
+                          complete
+                            ? "bg-success/10 text-success-ink"
+                            : action.isOverdue
+                              ? "bg-warning/10 text-warning"
+                              : "bg-primary-soft text-primary"
+                        }`}
+                      >
+                        {complete ? (
+                          <CheckCircle2 className="size-4" />
+                        ) : (
+                          <Clock3 className="size-4" />
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="truncate font-bold text-primary-ink">{action.title}</h3>
+                          <Badge variant="neutral" className="text-[0.65rem]">
+                            {actionTypeLabels[action.type]}
+                          </Badge>
+                        </div>
+                        <p className="mt-0.5 text-xs text-muted">
+                          {action.medicationToday
+                            ? action.medicationToday.total > 0
+                              ? `${action.medicationToday.resolved} of ${action.medicationToday.total} doses resolved today`
+                              : "Medication course not scheduled for today"
+                            : `${actionStateLabels[action.displayState]} · ${formatActionDate(action.dueDate)}`}
+                        </p>
+                      </div>
+                      <Button asChild variant="ghost" size="icon">
+                        <Link
+                          to="/patient/actions/$actionId"
+                          params={{ actionId: action.id }}
+                          aria-label={`View ${action.title}`}
+                        >
+                          <ArrowRight className="size-4" />
+                        </Link>
+                      </Button>
                     </div>
-                    <Badge
-                      variant={action.isOverdue ? "warning" : complete ? "success" : "neutral"}
-                    >
-                      {action.locked ? "Upcoming" : actionStateLabels[action.displayState]}
-                    </Badge>
-                  </div>
-                  <p className="mt-3 line-clamp-2 text-sm leading-6 text-muted">
-                    {action.displayState === "awaiting_review"
-                      ? "Report received. Awaiting Provider review and the communicated next step."
-                      : action.instructions}
-                  </p>
-                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-                    <span className="text-xs text-muted">{formatActionDate(action.dueDate)}</span>
-                    <Button asChild variant="ghost" size="sm">
-                      <Link to="/patient/actions/$actionId" params={{ actionId: action.id }}>
-                        Details
-                        <ArrowRight className="size-4" />
-                      </Link>
-                    </Button>
-                  </div>
-                </Card>
-              </li>
-            );
-          })}
-        </ol>
+                  );
+                })}
+              </Card>
+            </div>
+          );
+        })
       )}
     </section>
   );

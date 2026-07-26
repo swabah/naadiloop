@@ -46,13 +46,7 @@ export function ProviderPatientsPage() {
   const [otp, setOtp] = useState("");
   const normalizedInput = uhidInput.trim().toUpperCase();
 
-  const lookupQuery = trpc.patient.findByUhid.useQuery(
-    { uhid: lookupUhid },
-    {
-      enabled: Boolean(lookupUhid),
-      retry: false,
-    },
-  );
+  const lookupPatient = trpc.patient.requestLink.useMutation();
 
   const linkPatient = trpc.patient.linkByUhid.useMutation({
     onSuccess: async () => {
@@ -68,24 +62,26 @@ export function ProviderPatientsPage() {
     setUhidInput("");
     setLookupUhid("");
     setOtp("");
+    lookupPatient.reset();
     linkPatient.reset();
   };
 
   const useScannedUhid = (uhid: string) => {
+    lookupPatient.reset();
     linkPatient.reset();
     setUhidInput(uhid);
     setLookupUhid(uhid);
     setOtp("");
+    lookupPatient.mutate({ uhid });
   };
 
   const searchPatient = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    lookupPatient.reset();
     linkPatient.reset();
-    if (normalizedInput === lookupUhid) {
-      void lookupQuery.refetch();
-    } else {
-      setLookupUhid(normalizedInput);
-    }
+    setLookupUhid(normalizedInput);
+    setOtp("");
+    lookupPatient.mutate({ uhid: normalizedInput });
   };
 
   const confirmLink = (event: FormEvent<HTMLFormElement>) => {
@@ -126,8 +122,7 @@ export function ProviderPatientsPage() {
                 Link a registered Patient
               </DialogTitle>
               <DialogDescription className="text-sm leading-6 text-muted">
-                Ask the Patient for their UHID. The production flow will send an OTP to their
-                registered phone.
+                Search the Patient UHID first. A temporary OTP will then appear in their profile.
               </DialogDescription>
             </DialogHeader>
 
@@ -150,6 +145,7 @@ export function ProviderPatientsPage() {
                     if (lookupUhid) {
                       setLookupUhid("");
                       setOtp("");
+                      lookupPatient.reset();
                     }
                   }}
                   placeholder="UHID-..."
@@ -162,50 +158,49 @@ export function ProviderPatientsPage() {
                 type="submit"
                 variant="outline"
                 className="w-full"
-                disabled={!normalizedInput || lookupQuery.isFetching}
+                disabled={!normalizedInput || lookupPatient.isPending}
               >
-                {lookupQuery.isFetching ? (
+                {lookupPatient.isPending ? (
                   <LoaderCircle className="size-4 animate-spin" />
                 ) : (
                   <Search className="size-4" />
                 )}
-                {lookupQuery.isFetching ? "Searching…" : "Search UHID"}
+                {lookupPatient.isPending ? "Requesting…" : "Search UHID"}
               </Button>
             </form>
 
-            {lookupQuery.isError ? (
+            {lookupPatient.isError ? (
               <p className="rounded-xl bg-warning/10 px-4 py-3 text-sm text-warning" role="alert">
-                {lookupQuery.error.message}
+                {lookupPatient.error.message}
               </p>
             ) : null}
 
-            {lookupQuery.data ? (
+            {lookupPatient.data ? (
               <div className="space-y-4 rounded-2xl border border-primary/20 bg-primary-soft/35 p-4">
                 <div className="flex items-start gap-3">
                   <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-white text-primary">
                     <UserRound className="size-5" />
                   </div>
                   <div>
-                    <p className="font-bold text-primary-ink">{lookupQuery.data.patient.name}</p>
+                    <p className="font-bold text-primary-ink">{lookupPatient.data.patient.name}</p>
                     <p className="mt-1 font-mono text-xs text-muted">
-                      {lookupQuery.data.patient.uhid}
+                      {lookupPatient.data.patient.uhid}
                     </p>
                     <p className="mt-1 text-xs text-muted">
-                      OTP destination: phone {lookupQuery.data.patient.phoneHint}
+                      Registered phone: {lookupPatient.data.patient.phoneHint}
                     </p>
                   </div>
                 </div>
 
-                {lookupQuery.data.alreadyAssigned ? (
+                {lookupPatient.data.alreadyAssigned ? (
                   <p className="rounded-xl bg-success/10 px-4 py-3 text-sm text-success-ink">
                     This Patient is already linked to your Hospital.
                   </p>
                 ) : (
                   <form className="space-y-3" onSubmit={confirmLink}>
                     <div className="rounded-xl bg-white p-3 text-xs leading-5 text-muted">
-                      <span className="font-bold text-primary-ink">MVP demo OTP:</span> use{" "}
-                      <span className="font-mono font-bold text-primary">000000</span>. No real
-                      message is sent.
+                      Ask the Patient to open <span className="font-bold">Profile &amp; QR</span>{" "}
+                      and share their current six-digit Hospital linking OTP.
                     </div>
                     <label className="space-y-2" htmlFor="patient-otp">
                       <span className="text-sm font-semibold">Six-digit OTP</span>
@@ -215,7 +210,7 @@ export function ProviderPatientsPage() {
                         onChange={(event) =>
                           setOtp(event.target.value.replace(/\D/g, "").slice(0, 6))
                         }
-                        placeholder="000000"
+                        placeholder="6-digit OTP"
                         inputMode="numeric"
                         autoComplete="one-time-code"
                         maxLength={6}
@@ -283,8 +278,8 @@ export function ProviderPatientsPage() {
           </div>
           <h2 className="mt-4 text-xl font-bold text-primary-ink">No linked Patients yet</h2>
           <p className="mt-2 max-w-md text-sm leading-6 text-muted">
-            Search a registered Patient&apos;s UHID and confirm the demo OTP to add them to this
-            Hospital.
+            Search a registered Patient&apos;s UHID and confirm the OTP from their profile to add
+            them to this Hospital.
           </p>
           <Button className="mt-5" onClick={() => setDialogOpen(true)}>
             <KeyRound className="size-4" />

@@ -28,6 +28,35 @@ export const medicationActionSchema = z.object({
     .object({
       schedule: z.string().trim().min(1).max(240).optional(),
       durationDays: z.number().int().positive().max(365).optional(),
+      frequencyPerDay: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]).optional(),
+      doseTimes: z
+        .array(z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/))
+        .min(1)
+        .max(4)
+        .optional(),
+      startDate: z.string().date().optional(),
+    })
+    .superRefine((payload, ctx) => {
+      const structured = [payload.frequencyPerDay, payload.doseTimes, payload.startDate].some(
+        (value) => value !== undefined,
+      );
+      if (!structured) return;
+      if (!payload.frequencyPerDay || !payload.doseTimes || !payload.startDate) {
+        ctx.addIssue({
+          code: "custom",
+          message: "Medication frequency, dose times, and start date must be confirmed together.",
+        });
+        return;
+      }
+      if (payload.doseTimes.length !== payload.frequencyPerDay) {
+        ctx.addIssue({
+          code: "custom",
+          message: "Medication dose times must match the selected daily frequency.",
+        });
+      }
+      if (new Set(payload.doseTimes).size !== payload.doseTimes.length) {
+        ctx.addIssue({ code: "custom", message: "Medication dose times must be unique." });
+      }
     })
     .default({}),
 });
@@ -92,6 +121,23 @@ export const completeActionSchema = z.object({
   actionId: z.string().uuid(),
   outcome: z.enum(["completed", "taken", "skipped", "remind", "help"]),
   notes: z.string().trim().max(1_000).optional(),
+});
+
+export const todaySchema = patientIdSchema.extend({
+  date: z.string().date(),
+  timezoneOffsetMinutes: z.number().int().min(-840).max(840),
+});
+
+export const patientJourneySchema = patientIdSchema.extend({
+  date: z.string().date().optional(),
+  timezoneOffsetMinutes: z.number().int().min(-840).max(840).default(0),
+});
+
+export const recordDoseSchema = z.object({
+  actionId: z.string().uuid(),
+  scheduledFor: z.string().datetime({ offset: true }),
+  status: z.enum(["taken", "skipped"]),
+  timezoneOffsetMinutes: z.number().int().min(-840).max(840),
 });
 
 export const helpRequestSchema = z

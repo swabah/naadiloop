@@ -261,3 +261,64 @@ test("action-events repair migration restores dashboard event queries after sche
     await db.close();
   }
 });
+
+test("medication-dose migration enforces one record per scheduled action dose", async () => {
+  const db = new PGlite();
+  const migrationPath = fileURLToPath(
+    new URL("../migrations/0006_medication_doses.sql", import.meta.url),
+  );
+
+  try {
+    await db.exec(`
+      CREATE TYPE event_type AS ENUM ('created');
+      CREATE TABLE patients (id uuid PRIMARY KEY);
+      CREATE TABLE care_actions (id uuid PRIMARY KEY);
+    `);
+    await db.exec(await readFile(migrationPath, "utf8"));
+    await db.exec(`
+      INSERT INTO patients (id) VALUES ('20000000-0000-4000-8000-000000000001');
+      INSERT INTO care_actions (id) VALUES ('50000000-0000-4000-8000-000000000001');
+      INSERT INTO medication_dose_records (
+        care_action_id,
+        patient_id,
+        scheduled_for,
+        status
+      ) VALUES (
+        '50000000-0000-4000-8000-000000000001',
+        '20000000-0000-4000-8000-000000000001',
+        '2026-07-26T08:00:00Z',
+        'taken'
+      );
+    `);
+    await assert.rejects(
+      db.exec(`
+        INSERT INTO medication_dose_records (
+          care_action_id,
+          patient_id,
+          scheduled_for,
+          status
+        ) VALUES (
+          '50000000-0000-4000-8000-000000000001',
+          '20000000-0000-4000-8000-000000000001',
+          '2026-07-26T08:00:00Z',
+          'skipped'
+        );
+      `),
+    );
+    const enumValues = await db.query<{ enumlabel: string }>(
+      `SELECT enumlabel FROM pg_enum
+       JOIN pg_type ON pg_type.oid = pg_enum.enumtypid
+       WHERE pg_type.typname = 'event_type'`,
+    );
+    assert.equal(
+      enumValues.rows.some((value) => value.enumlabel === "dose_taken"),
+      true,
+    );
+    assert.equal(
+      enumValues.rows.some((value) => value.enumlabel === "dose_skipped"),
+      true,
+    );
+  } finally {
+    await db.close();
+  }
+});

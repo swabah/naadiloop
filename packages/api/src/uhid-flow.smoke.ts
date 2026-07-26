@@ -63,18 +63,44 @@ try {
     },
   });
 
-  const lookup = await providerCaller.patient.findByUhid({ uhid: registration.uhid });
+  const lookup = await providerCaller.patient.requestLink({ uhid: registration.uhid });
   if (lookup.alreadyAssigned) throw new Error("UHID lookup reported an unexpected assignment.");
+
+  const patientCaller = appRouter.createCaller({
+    db,
+    user: {
+      id: patient.id,
+      email,
+      name: patient.name,
+      role: "patient",
+      status: "active",
+      patientId: patient.id,
+      uhid: patient.uhid,
+    },
+  });
+  const patientProfile = await patientCaller.auth.me();
+  if (!("linkRequest" in patientProfile) || !patientProfile.linkRequest) {
+    throw new Error("Patient profile did not expose a linking OTP.");
+  }
 
   let badOtpRejected = false;
   try {
-    await providerCaller.patient.linkByUhid({ uhid: registration.uhid, otp: "123456" });
+    const badOtp = patientProfile.linkRequest.otp === "999999" ? "888888" : "999999";
+    await providerCaller.patient.linkByUhid({ uhid: registration.uhid, otp: badOtp });
   } catch {
     badOtpRejected = true;
   }
   if (!badOtpRejected) throw new Error("Invalid OTP was accepted.");
 
-  await providerCaller.patient.linkByUhid({ uhid: registration.uhid, otp: "000000" });
+  await providerCaller.patient.linkByUhid({
+    uhid: registration.uhid,
+    otp: patientProfile.linkRequest.otp,
+  });
+
+  const linkedProfile = await patientCaller.auth.me();
+  if (!("linkRequest" in linkedProfile) || linkedProfile.linkRequest !== null) {
+    throw new Error("Patient linking OTP remained visible after assignment.");
+  }
 
   const sourceText = "Take the fictional tablet once daily after breakfast.";
   const document = await providerCaller.document.create({
@@ -100,18 +126,6 @@ try {
   });
   await providerCaller.carePlan.activate({ carePlanId: draft.carePlanId });
 
-  const patientCaller = appRouter.createCaller({
-    db,
-    user: {
-      id: patient.id,
-      email,
-      name: patient.name,
-      role: "patient",
-      status: "active",
-      patientId: patient.id,
-      uhid: patient.uhid,
-    },
-  });
   const next = await patientCaller.patient.nextAction({ patientId: patient.id });
   if (next.action?.title !== "Take the fictional tablet") {
     throw new Error("Activated Hospital Care data was not visible on the Patient dashboard.");

@@ -1,11 +1,11 @@
-import { Fingerprint, Mail, ShieldCheck, UserRound } from "lucide-react";
+import { Fingerprint, KeyRound, Mail, ShieldCheck, UserRound } from "lucide-react";
 import { UhidQrCode } from "../../components/uhid-qr-code";
 import { Badge } from "../../components/ui/badge";
 import { Card } from "../../components/ui/card";
 import { trpc } from "../../lib/trpc";
 
 export function PatientProfilePage() {
-  const me = trpc.auth.me.useQuery();
+  const me = trpc.auth.me.useQuery(undefined, { refetchInterval: 5_000 });
 
   if (me.isPending) {
     return (
@@ -70,6 +70,23 @@ export function PatientProfilePage() {
                 </p>
               </div>
             </div>
+            {me.data.linkRequest ? (
+              <div className="flex items-start gap-3 rounded-2xl border border-primary/15 bg-primary-soft/45 px-4 py-3">
+                <KeyRound className="mt-0.5 size-4 shrink-0 text-primary" />
+                <div className="min-w-0">
+                  <p className="text-xs font-bold uppercase tracking-wider text-muted">
+                    Hospital linking OTP
+                  </p>
+                  <p className="mt-1 font-mono text-2xl font-extrabold tracking-[0.3em] text-primary-ink">
+                    {me.data.linkRequest.otp}
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-muted">
+                    {me.data.linkRequest.providerName} is trying to add you. Share this OTP only if
+                    you approve. It expires in 10 minutes.
+                  </p>
+                </div>
+              </div>
+            ) : null}
           </div>
           <div className="mt-5 flex items-start gap-3 rounded-2xl border border-success/15 bg-success/5 px-4 py-3 text-sm leading-6 text-success-ink">
             <ShieldCheck className="mt-0.5 size-5 shrink-0" />

@@ -4,7 +4,9 @@ import {
   careActions,
   carePlans,
   type getDb,
+  medicationDoseRecords,
   organizationDetails,
+  patientLinkRequests,
   patients,
   providerPatientAssignments,
   reports,
@@ -14,7 +16,7 @@ import {
 } from "@naadi/db";
 import { TRPCError } from "@trpc/server";
 import bcrypt from "bcryptjs";
-import { and, asc, desc, eq, inArray, isNull, or } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, inArray, isNull, or } from "drizzle-orm";
 import jwt from "jsonwebtoken";
 import { z } from "zod";
 import { patientOutcomeTransition, reportUploadTransition } from "./action-transitions";
@@ -22,10 +24,17 @@ import { dashboardSectionFor, evaluateCareGaps } from "./care-gaps";
 import { canCloseAction } from "./closure-policy";
 import { getJwtSecret } from "./context";
 import {
+  isStructuredMedicationSchedule,
+  localDateFromUtc,
+  scheduledDosesForDate,
+  scheduledDosesThroughDate,
+} from "./medication-schedule";
+import {
   type PatientActionRecord,
   projectPatientJourney,
   selectNextPatientAction,
 } from "./patient-actions";
+import { patientLinkOtp } from "./patient-link-otp";
 import { carePlanRouter } from "./router-care-plan";
 import {
   actionIdSchema,
@@ -37,10 +46,13 @@ import {
   helpRequestSchema,
   loginInputSchema,
   patientIdSchema,
+  patientJourneySchema,
   patientLinkSchema,
   patientLookupSchema,
+  recordDoseSchema,
   registerInputSchema,
   reviewReportSchema,
+  todaySchema,
   uploadReportSchema,
 } from "./schemas";
 import {
@@ -78,6 +90,34 @@ async function assertProviderPatientAccess(
       message: "This Patient is not assigned to your Provider account.",
     });
   }
+}
+
+function otpForLinkRequest(request: { patientId: string; providerId: string; requestedAt: Date }) {
+  const nonce = `${request.providerId}:${request.requestedAt.toISOString()}`;
+  return patientLinkOtp(request.patientId, nonce, getJwtSecret());
+}
+
+async function getActivePatientLinkRequest(db: ReturnType<typeof getDb>, patientId: string) {
+  const [request] = await db
+    .select({
+      patientId: patientLinkRequests.patientId,
+      providerId: patientLinkRequests.providerId,
+      providerName: users.name,
+      requestedAt: patientLinkRequests.requestedAt,
+      expiresAt: patientLinkRequests.expiresAt,
+    })
+    .from(patientLinkRequests)
+    .innerJoin(users, eq(users.id, patientLinkRequests.providerId))
+    .where(
+      and(
+        eq(patientLinkRequests.patientId, patientId),
+        gt(patientLinkRequests.expiresAt, new Date()),
+      ),
+    )
+    .orderBy(desc(patientLinkRequests.requestedAt))
+    .limit(1);
+
+  return request;
 }
 
 async function getVisiblePatientActions(db: ReturnType<typeof getDb>, patientId: string) {
@@ -150,6 +190,30 @@ function serializePatientAction<
     dueDate: action.dueDate?.toISOString(),
     createdAt: action.createdAt.toISOString(),
   };
+}
+
+function medicationPayload(action: { type: string; payload: unknown }) {
+  return action.type === "MEDICATION" && isStructuredMedicationSchedule(action.payload)
+    ? action.payload
+    : null;
+}
+
+async function getDoseRecords(
+  db: ReturnType<typeof getDb>,
+  patientId: string,
+  actionIds: string[],
+) {
+  if (actionIds.length === 0) return [];
+  return db
+    .select()
+    .from(medicationDoseRecords)
+    .where(
+      and(
+        eq(medicationDoseRecords.patientId, patientId),
+        inArray(medicationDoseRecords.careActionId, actionIds),
+      ),
+    )
+    .orderBy(asc(medicationDoseRecords.scheduledFor));
 }
 
 async function buildProviderDashboard(
@@ -601,7 +665,21 @@ export const appRouter = router({
         user: payload,
       };
     }),
-    me: protectedProcedure.query(({ ctx }) => ctx.user),
+    me: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "patient") return ctx.user;
+
+      const request = await getActivePatientLinkRequest(ctx.db, ctx.user.id);
+      return {
+        ...ctx.user,
+        linkRequest: request
+          ? {
+              otp: otpForLinkRequest(request),
+              providerName: request.providerName,
+              expiresAt: request.expiresAt.toISOString(),
+            }
+          : null,
+      };
+    }),
   }),
   admin: router({
     pendingApprovals: superAdminProcedure.query(async ({ ctx }) => {
@@ -685,13 +763,7 @@ export const appRouter = router({
         alreadyAssigned: Boolean(assigned),
       };
     }),
-    linkByUhid: providerProcedure.input(patientLinkSchema).mutation(async ({ ctx, input }) => {
-      if (input.otp !== "000000") {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "Invalid OTP. Use 000000 for this MVP.",
-        });
-      }
+    requestLink: providerProcedure.input(patientLookupSchema).mutation(async ({ ctx, input }) => {
       const [row] = await ctx.db
         .select({ patient: patients })
         .from(patients)
@@ -706,11 +778,85 @@ export const appRouter = router({
           message: "No active Patient was found for this UHID.",
         });
       }
-      const inserted = await ctx.db
-        .insert(providerPatientAssignments)
-        .values({ providerId: ctx.user.id, patientId: row.patient.id })
-        .onConflictDoNothing()
-        .returning({ patientId: providerPatientAssignments.patientId });
+
+      const assigned = await ctx.db.query.providerPatientAssignments.findFirst({
+        where: and(
+          eq(providerPatientAssignments.providerId, ctx.user.id),
+          eq(providerPatientAssignments.patientId, row.patient.id),
+        ),
+      });
+      if (!assigned) {
+        const requestedAt = new Date();
+        const expiresAt = new Date(requestedAt.getTime() + 10 * 60_000);
+        await ctx.db.transaction(async (tx) => {
+          await tx
+            .delete(patientLinkRequests)
+            .where(eq(patientLinkRequests.patientId, row.patient.id));
+          await tx.insert(patientLinkRequests).values({
+            providerId: ctx.user.id,
+            patientId: row.patient.id,
+            requestedAt,
+            expiresAt,
+          });
+        });
+      }
+
+      const phoneDigits = row.patient.phone?.replace(/\D/g, "") ?? "";
+      return {
+        patient: {
+          uhid: row.patient.uhid,
+          name: row.patient.name,
+          phoneHint: phoneDigits ? `ending ${phoneDigits.slice(-4)}` : "not available",
+        },
+        alreadyAssigned: Boolean(assigned),
+      };
+    }),
+    linkByUhid: providerProcedure.input(patientLinkSchema).mutation(async ({ ctx, input }) => {
+      const [row] = await ctx.db
+        .select({ patient: patients })
+        .from(patients)
+        .innerJoin(users, eq(users.id, patients.id))
+        .where(
+          and(eq(patients.uhid, input.uhid), eq(users.role, "patient"), eq(users.status, "active")),
+        )
+        .limit(1);
+      if (!row) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "No active Patient was found for this UHID.",
+        });
+      }
+      const request = await ctx.db.query.patientLinkRequests.findFirst({
+        where: and(
+          eq(patientLinkRequests.providerId, ctx.user.id),
+          eq(patientLinkRequests.patientId, row.patient.id),
+          gt(patientLinkRequests.expiresAt, new Date()),
+        ),
+      });
+      if (!request) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "This OTP request has expired. Search the Patient UHID again.",
+        });
+      }
+      const expectedOtp = otpForLinkRequest(request);
+      if (input.otp !== expectedOtp) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Invalid OTP. Ask the Patient to check the current code in their profile.",
+        });
+      }
+      const inserted = await ctx.db.transaction(async (tx) => {
+        const linked = await tx
+          .insert(providerPatientAssignments)
+          .values({ providerId: ctx.user.id, patientId: row.patient.id })
+          .onConflictDoNothing()
+          .returning({ patientId: providerPatientAssignments.patientId });
+        await tx
+          .delete(patientLinkRequests)
+          .where(eq(patientLinkRequests.patientId, row.patient.id));
+        return linked;
+      });
       return {
         patient: {
           id: row.patient.id,
@@ -737,12 +883,153 @@ export const appRouter = router({
           visibleActions.length > 0 && visibleActions.every((action) => action.status === "CLOSED"),
       };
     }),
-    journey: patientProcedure.input(patientIdSchema).query(async ({ ctx, input }) => {
+    today: patientProcedure.input(todaySchema).query(async ({ ctx, input }) => {
+      assertPatientAccess(ctx.user, input.patientId);
+      const now = new Date();
+      const visibleActions = await getVisiblePatientActions(ctx.db, input.patientId);
+      const structuredMedicationActions = visibleActions.filter((action) =>
+        Boolean(medicationPayload(action)),
+      );
+      const records = await getDoseRecords(
+        ctx.db,
+        input.patientId,
+        structuredMedicationActions.map((action) => action.id),
+      );
+      const recordByDose = new Map(
+        records.map((record) => [
+          `${record.careActionId}:${record.scheduledFor.toISOString()}`,
+          record,
+        ]),
+      );
+      const items: Array<{
+        id: string;
+        kind: "medication_dose" | "care_action";
+        actionId: string;
+        title: string;
+        instructions: string;
+        scheduledFor: string | null;
+        status: "taken" | "skipped" | "completed" | null;
+        section: "overdue" | "now" | "later" | "done";
+        actionType: (typeof careActions.$inferSelect)["type"];
+      }> = [];
+
+      for (const action of visibleActions) {
+        const schedule = medicationPayload(action);
+        if (schedule) {
+          for (const dose of scheduledDosesThroughDate(
+            schedule,
+            input.date,
+            input.timezoneOffsetMinutes,
+          )) {
+            const scheduledFor = dose.scheduledFor.toISOString();
+            const record = recordByDose.get(`${action.id}:${scheduledFor}`);
+            if (dose.date !== input.date && record) continue;
+            const section = record
+              ? "done"
+              : dose.scheduledFor.getTime() < now.getTime()
+                ? "overdue"
+                : dose.scheduledFor.getTime() <= now.getTime() + 60 * 60_000
+                  ? "now"
+                  : "later";
+            items.push({
+              id: `dose:${action.id}:${scheduledFor}`,
+              kind: "medication_dose",
+              actionId: action.id,
+              title: action.title,
+              instructions: action.instructions,
+              scheduledFor,
+              status: record?.status ?? null,
+              section,
+              actionType: action.type,
+            });
+          }
+          continue;
+        }
+
+        const dueLocalDate = action.dueDate
+          ? localDateFromUtc(action.dueDate, input.timezoneOffsetMinutes)
+          : null;
+        const completed = ["COMPLETED", "AWAITING_REVIEW", "REVIEWED", "CLOSED"].includes(
+          action.status,
+        );
+        if (
+          (dueLocalDate && dueLocalDate > input.date) ||
+          (completed && dueLocalDate !== input.date)
+        ) {
+          continue;
+        }
+        const section = completed
+          ? "done"
+          : dueLocalDate && dueLocalDate < input.date
+            ? "overdue"
+            : action.dueDate && action.dueDate.getTime() > now.getTime() + 60 * 60_000
+              ? "later"
+              : "now";
+        items.push({
+          id: `action:${action.id}`,
+          kind: "care_action",
+          actionId: action.id,
+          title: action.title,
+          instructions: action.instructions,
+          scheduledFor: action.dueDate?.toISOString() ?? null,
+          status: completed ? "completed" : null,
+          section,
+          actionType: action.type,
+        });
+      }
+
+      const rank = { overdue: 0, now: 1, later: 2, done: 3 } as const;
+      items.sort(
+        (left, right) =>
+          rank[left.section] - rank[right.section] ||
+          (left.scheduledFor ?? "").localeCompare(right.scheduledFor ?? "") ||
+          left.title.localeCompare(right.title),
+      );
+      return {
+        date: input.date,
+        items,
+        progress: {
+          resolved: items.filter((item) => item.section === "done").length,
+          total: items.length,
+        },
+      };
+    }),
+    journey: patientProcedure.input(patientJourneySchema).query(async ({ ctx, input }) => {
       assertPatientAccess(ctx.user, input.patientId);
       const visibleActions = await getVisiblePatientActions(ctx.db, input.patientId);
       const projected = projectPatientJourney(visibleActions, new Date());
+      const structuredMedicationActions = visibleActions.filter((action) =>
+        Boolean(medicationPayload(action)),
+      );
+      const records = input.date
+        ? await getDoseRecords(
+            ctx.db,
+            input.patientId,
+            structuredMedicationActions.map((action) => action.id),
+          )
+        : [];
       return {
-        actions: projected.actions.map(serializePatientAction),
+        actions: projected.actions.map((action) => {
+          const schedule = medicationPayload(action);
+          const todayDoses =
+            schedule && input.date
+              ? scheduledDosesForDate(schedule, input.date, input.timezoneOffsetMinutes)
+              : [];
+          const scheduled = new Set(todayDoses.map((dose) => dose.scheduledFor.toISOString()));
+          const resolved = records.filter(
+            (record) =>
+              record.careActionId === action.id && scheduled.has(record.scheduledFor.toISOString()),
+          ).length;
+          return {
+            ...serializePatientAction(action),
+            medicationToday: schedule
+              ? {
+                  resolved,
+                  total: todayDoses.length,
+                }
+              : null,
+          };
+        }),
         progress: projected.progress,
       };
     }),
@@ -776,9 +1063,124 @@ export const appRouter = router({
         patient: { id: row.patient.id, name: row.patient.name },
       };
     }),
+    recordDose: patientProcedure.input(recordDoseSchema).mutation(async ({ ctx, input }) => {
+      const row = await getVisiblePatientActionForMutation(ctx.db, input.actionId);
+      assertPatientAccess(ctx.user, row.patient.id);
+      const schedule = medicationPayload(row.action);
+      if (!schedule) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "This medication does not have a Provider-confirmed dose schedule.",
+        });
+      }
+      if (row.action.status === "CLOSED") {
+        throw new TRPCError({ code: "CONFLICT", message: "This medication course is closed." });
+      }
+
+      const scheduledFor = new Date(input.scheduledFor);
+      const localDate = localDateFromUtc(scheduledFor, input.timezoneOffsetMinutes);
+      const validDose = scheduledDosesForDate(
+        schedule,
+        localDate,
+        input.timezoneOffsetMinutes,
+      ).some((dose) => dose.scheduledFor.getTime() === scheduledFor.getTime());
+      if (!validDose) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "That dose does not belong to the confirmed medication schedule.",
+        });
+      }
+
+      const [existing] = await ctx.db
+        .select()
+        .from(medicationDoseRecords)
+        .where(
+          and(
+            eq(medicationDoseRecords.careActionId, row.action.id),
+            eq(medicationDoseRecords.scheduledFor, scheduledFor),
+          ),
+        )
+        .limit(1);
+      if (existing?.status === input.status) {
+        return {
+          actionId: row.action.id,
+          scheduledFor: scheduledFor.toISOString(),
+          status: input.status,
+          unchanged: true,
+          courseCompleted: row.action.status === "COMPLETED",
+        };
+      }
+
+      let courseCompleted = row.action.status === "COMPLETED";
+      await ctx.db.transaction(async (tx) => {
+        await tx
+          .insert(medicationDoseRecords)
+          .values({
+            id: existing?.id ?? crypto.randomUUID(),
+            careActionId: row.action.id,
+            patientId: row.patient.id,
+            scheduledFor,
+            status: input.status,
+            recordedAt: new Date(),
+          })
+          .onConflictDoUpdate({
+            target: [medicationDoseRecords.careActionId, medicationDoseRecords.scheduledFor],
+            set: { status: input.status, recordedAt: new Date() },
+          });
+        await tx.insert(actionEvents).values({
+          id: crypto.randomUUID(),
+          careActionId: row.action.id,
+          patientId: row.patient.id,
+          eventType: input.status === "taken" ? "dose_taken" : "dose_skipped",
+          createdBy: "patient",
+          notes: `Patient marked the ${scheduledFor.toISOString()} dose ${input.status}.`,
+        });
+
+        if (schedule.durationDays && row.action.status !== "COMPLETED") {
+          const [countRow] = await tx
+            .select({ value: count() })
+            .from(medicationDoseRecords)
+            .where(eq(medicationDoseRecords.careActionId, row.action.id));
+          const resolvedCount = countRow?.value ?? 0;
+          const totalDoses = schedule.durationDays * schedule.frequencyPerDay;
+          if (resolvedCount >= totalDoses) {
+            await tx
+              .update(careActions)
+              .set({ status: "COMPLETED" })
+              .where(eq(careActions.id, row.action.id));
+            await tx.insert(actionEvents).values({
+              id: crypto.randomUUID(),
+              careActionId: row.action.id,
+              patientId: row.patient.id,
+              eventType: "completed",
+              createdBy: "system",
+              notes: "All scheduled doses in the medication course were resolved.",
+            });
+            courseCompleted = true;
+          }
+        }
+      });
+      return {
+        actionId: row.action.id,
+        scheduledFor: scheduledFor.toISOString(),
+        status: input.status,
+        unchanged: false,
+        courseCompleted,
+      };
+    }),
     markCompleted: patientProcedure.input(completeActionSchema).mutation(async ({ ctx, input }) => {
       const row = await getVisiblePatientActionForMutation(ctx.db, input.actionId);
       assertPatientAccess(ctx.user, row.patient.id);
+      if (
+        row.action.type === "MEDICATION" &&
+        medicationPayload(row.action) &&
+        ["taken", "skipped"].includes(input.outcome)
+      ) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Record each scheduled medication dose separately.",
+        });
+      }
       const transition = patientOutcomeTransition(
         { type: row.action.type, status: row.action.status },
         input.outcome,
@@ -859,6 +1261,12 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         const row = await getVisiblePatientActionForMutation(ctx.db, input.actionId);
         assertPatientAccess(ctx.user, row.patient.id);
+        if (medicationPayload(row.action)) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Record each scheduled medication dose separately.",
+          });
+        }
         const transition = patientOutcomeTransition(
           { type: row.action.type, status: row.action.status },
           "skipped",

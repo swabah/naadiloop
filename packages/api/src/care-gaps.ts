@@ -29,7 +29,9 @@ export interface CareGapEvent {
     | "reviewed"
     | "closed"
     | "follow_up_created"
-    | "help_resolved";
+    | "help_resolved"
+    | "dose_taken"
+    | "dose_skipped";
   timestamp: Date;
   notes: string | null;
 }
@@ -110,13 +112,20 @@ export function evaluateCareGaps(
 
   if (input.action.type === "MEDICATION") {
     const outcomes = input.events
-      .filter((event) => ["completed", "skipped", "reminder_requested"].includes(event.eventType))
+      .filter((event) =>
+        ["completed", "skipped", "reminder_requested", "dose_taken", "dose_skipped"].includes(
+          event.eventType,
+        ),
+      )
       .sort((left, right) => right.timestamp.getTime() - left.timestamp.getTime())
       .slice(0, 2);
     if (
       outcomes.length === 2 &&
       outcomes.every(
-        (event) => event.eventType === "skipped" || event.eventType === "reminder_requested",
+        (event) =>
+          event.eventType === "skipped" ||
+          event.eventType === "dose_skipped" ||
+          event.eventType === "reminder_requested",
       )
     ) {
       gaps.push({

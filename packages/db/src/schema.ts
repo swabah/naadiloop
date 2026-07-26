@@ -52,7 +52,11 @@ export const eventType = pgEnum("event_type", [
   "closed",
   "follow_up_created",
   "help_resolved",
+  "dose_taken",
+  "dose_skipped",
 ]);
+
+export const medicationDoseStatus = pgEnum("medication_dose_status", ["taken", "skipped"]);
 
 export const userRole = pgEnum("user_role", [
   "patient",
@@ -66,6 +70,9 @@ export const userStatus = pgEnum("user_status", ["active", "pending_approval", "
 export interface MedicationPayload {
   schedule?: string;
   durationDays?: number;
+  frequencyPerDay?: 1 | 2 | 3 | 4;
+  doseTimes?: string[];
+  startDate?: string;
 }
 
 export interface TestPayload {
@@ -200,6 +207,29 @@ export const actionEvents = pgTable(
   ],
 );
 
+export const medicationDoseRecords = pgTable(
+  "medication_dose_records",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    careActionId: uuid("care_action_id")
+      .references(() => careActions.id, { onDelete: "cascade" })
+      .notNull(),
+    patientId: uuid("patient_id")
+      .references(() => patients.id, { onDelete: "cascade" })
+      .notNull(),
+    scheduledFor: timestamp("scheduled_for", { withTimezone: true }).notNull(),
+    status: medicationDoseStatus("status").notNull(),
+    recordedAt: timestamp("recorded_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("medication_dose_action_schedule_unique").on(
+      table.careActionId,
+      table.scheduledFor,
+    ),
+    index("medication_dose_patient_schedule_idx").on(table.patientId, table.scheduledFor),
+  ],
+);
+
 export const users = pgTable("users", {
   id: uuid("id").defaultRandom().primaryKey(),
   email: text("email").notNull().unique(),
@@ -245,6 +275,24 @@ export const providerPatientAssignments = pgTable(
   (table) => [
     primaryKey({ columns: [table.providerId, table.patientId] }),
     index("provider_patient_patient_idx").on(table.patientId),
+  ],
+);
+
+export const patientLinkRequests = pgTable(
+  "patient_link_requests",
+  {
+    providerId: uuid("provider_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    patientId: uuid("patient_id")
+      .references(() => patients.id, { onDelete: "cascade" })
+      .notNull(),
+    requestedAt: timestamp("requested_at", { withTimezone: true }).defaultNow().notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.providerId, table.patientId] }),
+    index("patient_link_requests_patient_expiry_idx").on(table.patientId, table.expiresAt),
   ],
 );
 

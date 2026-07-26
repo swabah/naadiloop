@@ -2,12 +2,42 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   helpRequestSchema,
+  medicationActionSchema,
   patientLinkSchema,
   patientLookupSchema,
   registerInputSchema,
   reviewReportSchema,
   uploadReportSchema,
 } from "./schemas";
+
+test("medication schedules require provider-confirmed frequency, times, and start date together", () => {
+  const base = {
+    type: "MEDICATION" as const,
+    title: "Example medicine",
+    instructions: "Take as prescribed",
+    priority: "NORMAL" as const,
+    sourceText: "Take as prescribed",
+  };
+  assert.equal(
+    medicationActionSchema.safeParse({
+      ...base,
+      payload: {
+        frequencyPerDay: 3,
+        doseTimes: ["08:00", "14:00", "20:00"],
+        startDate: "2026-07-26",
+        durationDays: 7,
+      },
+    }).success,
+    true,
+  );
+  assert.equal(
+    medicationActionSchema.safeParse({
+      ...base,
+      payload: { frequencyPerDay: 3, doseTimes: ["08:00", "20:00"] },
+    }).success,
+    false,
+  );
+});
 
 test("Patient-level help is valid without a Care action", () => {
   const result = helpRequestSchema.safeParse({

@@ -26,6 +26,7 @@ export function PatientActionPage() {
   const refreshJourney = async () => {
     await Promise.all([
       utils.patient.nextAction.invalidate(),
+      utils.patient.today.invalidate(),
       utils.patient.journey.invalidate(),
       utils.patient.actionDetails.invalidate({ actionId }),
     ]);
@@ -70,6 +71,13 @@ export function PatientActionPage() {
   }
 
   const { action, patient } = details.data;
+  const structuredMedication =
+    action.type === "MEDICATION" &&
+    action.payload &&
+    typeof action.payload === "object" &&
+    "frequencyPerDay" in action.payload &&
+    "doseTimes" in action.payload &&
+    Array.isArray(action.payload.doseTimes);
   return (
     <section className="space-y-6">
       <Button asChild variant="ghost" className="px-0">
@@ -101,6 +109,23 @@ export function PatientActionPage() {
               <p className="text-muted">{formatActionDate(action.dueDate)}</p>
             </div>
           </div>
+          {structuredMedication ? (
+            <div className="rounded-2xl bg-primary-soft/60 p-4">
+              <p className="font-bold text-primary-ink">Confirmed medication schedule</p>
+              <p className="mt-1 text-sm text-muted">
+                {action.payload.frequencyPerDay} times daily · {action.payload.doseTimes.join(", ")}
+                {"durationDays" in action.payload && action.payload.durationDays
+                  ? ` · ${action.payload.durationDays} days`
+                  : " · Ongoing"}
+              </p>
+              <Button asChild size="sm" className="mt-3">
+                <Link to="/patient/next">
+                  <AlarmClock className="size-4" />
+                  Track today&apos;s doses
+                </Link>
+              </Button>
+            </div>
+          ) : null}
           <blockquote className="rounded-2xl border border-primary/10 bg-primary-soft/50 p-5 text-sm leading-6 text-primary-ink">
             <Quote className="mb-2 size-5 text-primary" />
             <p>{action.sourceText}</p>
@@ -126,7 +151,7 @@ export function PatientActionPage() {
           {action.status === "PENDING" || action.status === "DUE" ? (
             <div className="space-y-3 border-t border-border pt-6">
               <h2 className="text-sm font-bold text-primary-ink">Record an update</h2>
-              {action.type === "MEDICATION" ? (
+              {action.type === "MEDICATION" && !structuredMedication ? (
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Button
                     disabled={pending}
@@ -161,7 +186,7 @@ export function PatientActionPage() {
                     </Link>
                   </Button>
                 </div>
-              ) : (
+              ) : action.type !== "MEDICATION" ? (
                 <div className="flex flex-col gap-3 sm:flex-row">
                   <Button
                     disabled={pending}
@@ -189,7 +214,7 @@ export function PatientActionPage() {
                     </Link>
                   </Button>
                 </div>
-              )}
+              ) : null}
             </div>
           ) : null}
           {action.type === "TEST" && action.status === "COMPLETED" ? (

@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   ArrowLeft,
   CalendarDays,
+  Clock3,
   LoaderCircle,
   Plus,
   Quote,
@@ -48,7 +49,22 @@ type EditableAction = {
   sourceText: string;
   assignedTo: string;
   reviewRequired: boolean;
+  medicationSchedule: string;
+  medicationFrequency: 1 | 2 | 3 | 4;
+  medicationDoseTimes: string[];
+  medicationStartDate: string;
+  medicationDurationDays: string;
 };
+
+const suggestedDoseTimes: Record<1 | 2 | 3 | 4, string[]> = {
+  1: ["08:00"],
+  2: ["08:00", "20:00"],
+  3: ["08:00", "14:00", "20:00"],
+  4: ["08:00", "12:00", "16:00", "20:00"],
+};
+const medicationDoseSlots = ["dose-1", "dose-2", "dose-3", "dose-4"] as const;
+
+const todayInputValue = () => new Date().toISOString().slice(0, 10);
 
 const isoDateToInputValue = (iso: string | null | undefined): string => {
   if (!iso) return "";
@@ -76,6 +92,7 @@ const editableFromAction = (action: {
   sourceText: string;
   assignedTo?: string;
   reviewRequired?: boolean;
+  payload?: unknown;
 }): EditableAction => ({
   key: crypto.randomUUID(),
   type: action.type,
@@ -88,19 +105,65 @@ const editableFromAction = (action: {
   sourceText: action.sourceText,
   assignedTo: action.assignedTo ?? "patient",
   reviewRequired: action.reviewRequired ?? false,
+  medicationSchedule:
+    action.payload && typeof action.payload === "object" && "schedule" in action.payload
+      ? String(action.payload.schedule ?? "")
+      : "",
+  medicationFrequency:
+    action.payload &&
+    typeof action.payload === "object" &&
+    "frequencyPerDay" in action.payload &&
+    [1, 2, 3, 4].includes(Number(action.payload.frequencyPerDay))
+      ? (Number(action.payload.frequencyPerDay) as 1 | 2 | 3 | 4)
+      : 1,
+  medicationDoseTimes:
+    action.payload &&
+    typeof action.payload === "object" &&
+    "doseTimes" in action.payload &&
+    Array.isArray(action.payload.doseTimes)
+      ? action.payload.doseTimes.map(String)
+      : [...suggestedDoseTimes[1]],
+  medicationStartDate:
+    action.payload && typeof action.payload === "object" && "startDate" in action.payload
+      ? String(action.payload.startDate ?? todayInputValue())
+      : isoDateToInputValue(
+          action.dueDate instanceof Date ? action.dueDate.toISOString() : action.dueDate,
+        ) || todayInputValue(),
+  medicationDurationDays:
+    action.payload && typeof action.payload === "object" && "durationDays" in action.payload
+      ? String(action.payload.durationDays ?? "")
+      : "",
 });
 
-const toServerAction = (action: EditableAction) => ({
-  type: action.type,
-  title: action.title,
-  instructions: action.instructions,
-  dueDate: inputValueToIsoDate(action.dueDate) ?? undefined,
-  priority: action.priority,
-  sourceText: action.sourceText,
-  assignedTo: action.assignedTo,
-  reviewRequired: action.reviewRequired,
-  payload: {},
-});
+const toServerAction = (action: EditableAction) => {
+  const base = {
+    title: action.title,
+    instructions: action.instructions,
+    dueDate: inputValueToIsoDate(action.dueDate) ?? undefined,
+    priority: action.priority,
+    sourceText: action.sourceText,
+    assignedTo: action.assignedTo,
+    reviewRequired: action.reviewRequired,
+  };
+  if (action.type === "MEDICATION") {
+    return {
+      ...base,
+      type: "MEDICATION" as const,
+      payload: {
+        schedule: action.medicationSchedule.trim() || undefined,
+        frequencyPerDay: action.medicationFrequency,
+        doseTimes: action.medicationDoseTimes,
+        startDate: action.medicationStartDate,
+        durationDays: action.medicationDurationDays
+          ? Number(action.medicationDurationDays)
+          : undefined,
+      },
+    };
+  }
+  if (action.type === "TEST") return { ...base, type: "TEST" as const, payload: {} };
+  if (action.type === "REFERRAL") return { ...base, type: "REFERRAL" as const, payload: {} };
+  return { ...base, type: "FOLLOW_UP" as const, payload: {} };
+};
 
 export function ProviderVerifyPage() {
   const { patientId } = useParams({ from: "/provider/patients/$patientId/verify" });
@@ -127,6 +190,7 @@ export function ProviderVerifyPage() {
           sourceText: action.sourceText,
           assignedTo: action.assignedTo,
           reviewRequired: action.reviewRequired,
+          payload: action.payload,
         }),
       );
     }
@@ -199,6 +263,11 @@ export function ProviderVerifyPage() {
         sourceText: "",
         assignedTo: "patient",
         reviewRequired: false,
+        medicationSchedule: "",
+        medicationFrequency: 1,
+        medicationDoseTimes: [...suggestedDoseTimes[1]],
+        medicationStartDate: todayInputValue(),
+        medicationDurationDays: "",
       },
     ]);
   };
@@ -214,6 +283,23 @@ export function ProviderVerifyPage() {
       if (!action.instructions.trim()) return "Every action needs instructions.";
       if (!action.sourceText.trim()) {
         return `Action "${action.title}" is missing a source sentence.`;
+      }
+      if (action.type === "MEDICATION") {
+        if (!action.medicationStartDate) {
+          return `Medication "${action.title}" needs a start date.`;
+        }
+        if (action.medicationDoseTimes.length !== action.medicationFrequency) {
+          return `Medication "${action.title}" needs one confirmed time for every daily dose.`;
+        }
+        const duration = action.medicationDurationDays
+          ? Number(action.medicationDurationDays)
+          : undefined;
+        if (
+          duration !== undefined &&
+          (!Number.isInteger(duration) || duration < 1 || duration > 365)
+        ) {
+          return `Medication "${action.title}" duration must be between 1 and 365 days.`;
+        }
       }
     }
     return null;
@@ -348,7 +434,14 @@ export function ProviderVerifyPage() {
                 <div className="flex items-center gap-2">
                   <Select
                     value={action.type}
-                    onValueChange={(value: ActionType) => updateAction(action.key, "type", value)}
+                    onValueChange={(value: ActionType) => {
+                      updateAction(action.key, "type", value);
+                      if (value === "MEDICATION" && action.medicationDoseTimes.length === 0) {
+                        updateAction(action.key, "medicationDoseTimes", [
+                          ...suggestedDoseTimes[action.medicationFrequency],
+                        ]);
+                      }
+                    }}
                   >
                     <SelectTrigger className="min-w-40" aria-label="Action type">
                       <SelectValue />
@@ -384,6 +477,127 @@ export function ProviderVerifyPage() {
                   </Button>
                 </div>
               </div>
+
+              {action.type === "MEDICATION" ? (
+                <div className="mt-5 rounded-2xl border border-primary/15 bg-primary-soft/35 p-4 sm:p-5">
+                  <div className="flex items-start gap-3">
+                    <Clock3 className="mt-0.5 size-5 shrink-0 text-primary" />
+                    <div>
+                      <h3 className="font-bold text-primary-ink">Confirm medication schedule</h3>
+                      <p className="mt-1 text-sm leading-6 text-muted">
+                        These times create the Patient&apos;s daily checklist and reminders. Confirm
+                        them against the prescription before activation.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-4 grid gap-4 sm:grid-cols-3">
+                    <div className="space-y-2">
+                      <label className="text-sm font-semibold" htmlFor={`frequency-${action.key}`}>
+                        Times per day
+                      </label>
+                      <Select
+                        value={String(action.medicationFrequency)}
+                        onValueChange={(value) => {
+                          const frequency = Number(value) as 1 | 2 | 3 | 4;
+                          updateAction(action.key, "medicationFrequency", frequency);
+                          updateAction(action.key, "medicationDoseTimes", [
+                            ...suggestedDoseTimes[frequency],
+                          ]);
+                        }}
+                      >
+                        <SelectTrigger
+                          id={`frequency-${action.key}`}
+                          aria-label="Medication times per day"
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent position="popper">
+                          {[1, 2, 3, 4].map((frequency) => (
+                            <SelectItem value={String(frequency)} key={frequency}>
+                              {frequency} {frequency === 1 ? "time" : "times"} daily
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <label
+                        className="text-sm font-semibold"
+                        htmlFor={`medication-start-${action.key}`}
+                      >
+                        Start date
+                      </label>
+                      <Input
+                        id={`medication-start-${action.key}`}
+                        type="date"
+                        value={action.medicationStartDate}
+                        onChange={(event) =>
+                          updateAction(action.key, "medicationStartDate", event.target.value)
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label
+                        className="text-sm font-semibold"
+                        htmlFor={`medication-duration-${action.key}`}
+                      >
+                        Duration (days)
+                      </label>
+                      <Input
+                        id={`medication-duration-${action.key}`}
+                        type="number"
+                        min={1}
+                        max={365}
+                        placeholder="Ongoing"
+                        value={action.medicationDurationDays}
+                        onChange={(event) =>
+                          updateAction(action.key, "medicationDurationDays", event.target.value)
+                        }
+                      />
+                    </div>
+                  </div>
+                  <div className="mt-4">
+                    <p className="text-sm font-semibold">Confirmed dose times</p>
+                    <div className="mt-2 grid gap-3 sm:grid-cols-4">
+                      {medicationDoseSlots
+                        .slice(0, action.medicationFrequency)
+                        .map((slot, doseIndex) => (
+                          <div className="space-y-1" key={`${action.key}-${slot}`}>
+                            <label className="text-xs text-muted" htmlFor={`${action.key}-${slot}`}>
+                              Dose {doseIndex + 1}
+                            </label>
+                            <Input
+                              id={`${action.key}-${slot}`}
+                              type="time"
+                              value={action.medicationDoseTimes[doseIndex] ?? ""}
+                              onChange={(event) => {
+                                const doseTimes = [...action.medicationDoseTimes];
+                                doseTimes[doseIndex] = event.target.value;
+                                updateAction(action.key, "medicationDoseTimes", doseTimes);
+                              }}
+                            />
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                  <div className="mt-4 space-y-2">
+                    <label
+                      className="text-sm font-semibold"
+                      htmlFor={`medication-schedule-${action.key}`}
+                    >
+                      Prescription schedule text
+                    </label>
+                    <Input
+                      id={`medication-schedule-${action.key}`}
+                      placeholder="For example: after food"
+                      value={action.medicationSchedule}
+                      onChange={(event) =>
+                        updateAction(action.key, "medicationSchedule", event.target.value)
+                      }
+                    />
+                  </div>
+                </div>
+              ) : null}
 
               <div className="mt-4 grid gap-4 sm:grid-cols-2">
                 <label className="space-y-2" htmlFor={`instructions-${action.key}`}>
