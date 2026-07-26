@@ -60,6 +60,6 @@ jobs:
           curl --fail --silent http://localhost:3001/ready
           curl --fail --silent \
             --header 'content-type: application/json' \
-            --data '{"json":{"email":"superadmin@naadi.demo","password":"ci-super-admin-password"}}' \
+            --data '{"email":"superadmin@naadi.demo","password":"ci-super-admin-password"}' \
             http://localhost:3001/trpc/auth.login
           pnpm --filter @naadi/api smoke:uhid
