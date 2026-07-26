@@ -1,5 +1,14 @@
 import { Link } from "@tanstack/react-router";
-import { ArrowRight, CheckCircle2, Clock3, HeartPulse, ListChecks, RefreshCw } from "lucide-react";
+import {
+  ArrowRight,
+  CalendarDays,
+  CheckCircle2,
+  CircleHelp,
+  Clock3,
+  HeartPulse,
+  ListChecks,
+  RefreshCw,
+} from "lucide-react";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
@@ -27,9 +36,9 @@ export function PatientNextPage() {
     return (
       <Card className="p-8 text-center">
         <HeartPulse className="mx-auto size-9 text-primary" />
-        <h1 className="mt-4 text-2xl font-bold text-primary-ink">Select the Patient demo view</h1>
+        <h1 className="mt-4 text-2xl font-bold text-primary-ink">Patient profile unavailable</h1>
         <p className="mt-2 text-sm text-muted">
-          Patient Care actions are available only in the Patient demo view.
+          Sign in with an active Patient account to view Care actions.
         </p>
       </Card>
     );
@@ -43,7 +52,7 @@ export function PatientNextPage() {
           Your Care journey could not be loaded
         </h1>
         <p className="mt-2 text-sm leading-6 text-muted">
-          Check that the Patient demo view is selected, then try again.
+          Refresh the page or sign in again, then retry.
         </p>
         <Button className="mt-5" onClick={() => void nextAction.refetch()}>
           <RefreshCw className="size-4" />
@@ -93,66 +102,110 @@ export function PatientNextPage() {
 
   return (
     <section className="space-y-7">
-      <div>
-        <Badge variant="info">Patient home · Updates automatically</Badge>
-        <h1 className="mt-4 text-3xl font-bold tracking-tight text-primary-ink sm:text-4xl">
-          What do I do next?
-        </h1>
+      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+        <div>
+          <Badge variant="info">Your care today</Badge>
+          <h1 className="mt-3 text-3xl font-bold tracking-tight text-primary-ink sm:text-4xl">
+            Hello, {me.data?.name?.split(" ")[0] ?? "there"}
+          </h1>
+          <p className="mt-2 text-sm leading-6 text-muted">
+            Here is the next step in your care journey.
+          </p>
+        </div>
+        {me.data?.uhid ? (
+          <div className="w-fit rounded-2xl bg-white px-4 py-3 shadow-sm ring-1 ring-border">
+            <p className="text-[0.65rem] font-bold uppercase tracking-[0.14em] text-muted">
+              Your UHID
+            </p>
+            <p className="mt-1 break-all font-mono text-sm font-bold text-primary-ink">
+              {me.data.uhid}
+            </p>
+          </div>
+        ) : null}
       </div>
 
-      <Card className="overflow-hidden">
-        <div className="bg-primary px-6 py-5 text-white sm:px-8">
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-white/75">
-            {actionTypeLabels[action.type]}
-          </p>
-          <h2 className="mt-3 max-w-3xl text-3xl font-bold leading-tight sm:text-4xl">
-            {awaitingReview ? "Wait for your Provider to review the report" : action.title}
-          </h2>
-        </div>
-        <div className="p-6 sm:p-8">
-          <div className="flex flex-wrap items-center gap-3">
-            <Badge variant={action.isOverdue ? "warning" : "default"}>
-              {actionStateLabels[action.displayState]}
-            </Badge>
-            <span className="flex items-center gap-2 text-sm text-muted">
-              <Clock3 className="size-4" />
-              {formatActionDate(action.dueDate)}
-            </span>
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.65fr)]">
+        <Card className="overflow-hidden">
+          <div className="relative overflow-hidden bg-primary px-6 py-6 text-white sm:px-8 sm:py-8">
+            <div className="absolute -right-12 -top-16 size-48 rounded-full bg-white/10" />
+            <div className="absolute -bottom-16 right-20 size-36 rounded-full bg-white/5" />
+            <div className="relative">
+              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-white/75">
+                <CalendarDays className="size-4" />
+                {actionTypeLabels[action.type]}
+              </div>
+              <h2 className="mt-4 max-w-3xl text-2xl font-bold leading-tight sm:text-4xl">
+                {awaitingReview ? "Your report is with your Provider" : action.title}
+              </h2>
+            </div>
           </div>
-          <p className="mt-5 text-lg leading-8 text-text">
-            {awaitingReview
-              ? "Your report was received. You do not need to interpret it; your Provider will communicate the next step."
-              : action.instructions}
-          </p>
-          <Button asChild className="mt-7 w-full sm:w-auto">
-            <Link to="/patient/actions/$actionId" params={{ actionId: action.id }}>
-              View this Care action
-              <ArrowRight className="size-4" />
-            </Link>
-          </Button>
-        </div>
-      </Card>
+          <div className="p-6 sm:p-8">
+            <div className="flex flex-wrap items-center gap-3">
+              <Badge variant={action.isOverdue ? "warning" : "default"}>
+                {actionStateLabels[action.displayState]}
+              </Badge>
+              <span className="flex items-center gap-2 text-sm text-muted">
+                <Clock3 className="size-4" />
+                {formatActionDate(action.dueDate)}
+              </span>
+            </div>
+            <p className="mt-5 text-base leading-7 text-text sm:text-lg sm:leading-8">
+              {awaitingReview
+                ? "Your report was received. You do not need to interpret it; your Provider will communicate the next step."
+                : action.instructions}
+            </p>
+            <Button asChild className="mt-7 w-full sm:w-auto">
+              <Link to="/patient/actions/$actionId" params={{ actionId: action.id }}>
+                View this care action
+                <ArrowRight className="size-4" />
+              </Link>
+            </Button>
+          </div>
+        </Card>
 
-      <Card className="p-5 sm:p-6">
-        <div className="flex items-center justify-between gap-4 text-sm">
-          <span className="font-bold text-primary-ink">Care journey progress</span>
-          <span className="text-muted">
-            {nextAction.data.progress.completed} of {nextAction.data.progress.total} completed
-          </span>
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-1">
+          <Card className="p-5 sm:p-6">
+            <div className="flex items-center justify-between">
+              <div className="grid size-11 place-items-center rounded-2xl bg-primary-soft text-primary">
+                <HeartPulse className="size-5" />
+              </div>
+              <span className="text-2xl font-bold text-primary-ink">{progressPercent}%</span>
+            </div>
+            <h2 className="mt-5 font-bold text-primary-ink">Journey progress</h2>
+            <p className="mt-1 text-sm text-muted">
+              {nextAction.data.progress.completed} of {nextAction.data.progress.total} actions
+              completed
+            </p>
+            <div className="mt-4 h-2 overflow-hidden rounded-full bg-primary-soft">
+              <div
+                className="h-full rounded-full bg-primary transition-[width]"
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+            <Button asChild variant="ghost" className="mt-3 w-full justify-between px-0">
+              <Link to="/patient/journey">
+                View complete timeline
+                <ArrowRight className="size-4" />
+              </Link>
+            </Button>
+          </Card>
+
+          <Card className="p-5 sm:p-6">
+            <div className="grid size-11 place-items-center rounded-2xl bg-success/10 text-success-ink">
+              <CircleHelp className="size-5" />
+            </div>
+            <h2 className="mt-5 font-bold text-primary-ink">Need help?</h2>
+            <p className="mt-1 text-sm leading-6 text-muted">
+              Send a support request to your care Provider from your current action.
+            </p>
+            <Button asChild variant="outline" className="mt-4 w-full">
+              <Link to="/patient/actions/$actionId" params={{ actionId: action.id }}>
+                Open action details
+              </Link>
+            </Button>
+          </Card>
         </div>
-        <div className="mt-3 h-2 overflow-hidden rounded-full bg-primary-soft">
-          <div
-            className="h-full rounded-full bg-primary transition-[width]"
-            style={{ width: `${progressPercent}%` }}
-          />
-        </div>
-        <Button asChild variant="ghost" className="mt-3 px-0">
-          <Link to="/patient/journey">
-            <HeartPulse className="size-4" />
-            View the complete timeline
-          </Link>
-        </Button>
-      </Card>
+      </div>
     </section>
   );
 }

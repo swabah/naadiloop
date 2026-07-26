@@ -1,25 +1,26 @@
 @import "tailwindcss";
 
 @theme {
-  --color-primary: #0f766e;
-  --color-primary-ink: #0b3a34;
-  --color-primary-soft: #e2f2ef;
+  --color-primary: #2563eb;
+  --color-primary-ink: #15213d;
+  --color-primary-soft: #e9efff;
   --color-accent: #f59e0b;
-  --color-gate: #7c3aed;
-  --color-success: #10b981;
-  --color-success-ink: #047857;
-  --color-warning: #ea580c;
-  --color-bg: #f6f8f7;
+  --color-gate: #7656d6;
+  --color-success: #22c55e;
+  --color-success-ink: #168447;
+  --color-warning: #e45b32;
+  --color-danger: #dc2626;
+  --color-bg: #f3f5fa;
   --color-surface: #ffffff;
-  --color-text: #1c1917;
-  --color-muted: #6f7774;
-  --color-border: #dfe7e4;
-  --font-sans: "Inter", "Avenir Next", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Fraunces", "Iowan Old Style", Georgia, serif;
-  --shadow-card: 0 24px 70px -38px rgba(11, 58, 52, 0.35);
+  --color-text: #27324a;
+  --color-muted: #737c91;
+  --color-border: #e2e7f0;
+  --font-sans: "Avenir Next", "Inter", ui-rounded, system-ui, -apple-system, sans-serif;
+  --font-display: "Avenir Next", "Inter", ui-rounded, system-ui, -apple-system, sans-serif;
+  --shadow-card: 0 18px 50px -30px rgba(32, 56, 117, 0.32);
   --background-image-hero-glow:
-    radial-gradient(circle at 15% 0%, rgba(167, 190, 255, 0.32), transparent 42%),
-    radial-gradient(circle at 85% 5%, rgba(15, 118, 110, 0.16), transparent 35%);
+    radial-gradient(circle at 12% 0%, rgba(183, 198, 255, 0.5), transparent 34%),
+    radial-gradient(circle at 92% 12%, rgba(209, 222, 255, 0.7), transparent 32%);
 }
 
 @layer base {
@@ -32,14 +33,15 @@
     color: var(--color-text);
     font-family: var(--font-sans);
     text-rendering: optimizeLegibility;
+    scroll-behavior: smooth;
   }
 
   body {
     margin: 0;
     min-width: 320px;
     min-height: 100vh;
-    background:
-      linear-gradient(rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0.28)), var(--color-bg);
+    background: var(--color-bg);
+    letter-spacing: -0.01em;
   }
 
   button,
@@ -47,7 +49,46 @@
     -webkit-tap-highlight-color: transparent;
   }
 
+  button {
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+  }
+
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.035em;
+  }
+
   ::selection {
-    background: rgba(15, 118, 110, 0.2);
+    background: rgba(37, 99, 235, 0.18);
+  }
+
+  :focus-visible {
+    outline: 3px solid rgba(37, 99, 235, 0.22);
+    outline-offset: 2px;
+  }
+}
+
+@layer utilities {
+  .app-panel {
+    border: 1px solid rgba(255, 255, 255, 0.9);
+    background: rgba(255, 255, 255, 0.88);
+    box-shadow: var(--shadow-card);
+    backdrop-filter: blur(18px);
+  }
+
+  .subtle-grid {
+    background-image:
+      linear-gradient(rgba(37, 99, 235, 0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(37, 99, 235, 0.04) 1px, transparent 1px);
+    background-size: 32px 32px;
+  }
+
+  .safe-bottom {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
   }
 }

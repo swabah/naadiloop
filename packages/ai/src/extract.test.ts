@@ -61,16 +61,59 @@ test("accepts all four Care action types with required fields and traceable quot
 
 test("retries once after invalid JSON and then succeeds", async () => {
   let calls = 0;
+  const prompts: string[] = [];
   const actions = await extractCareActions({
     sourceText: source,
-    request: async () => {
+    request: async (prompt) => {
       calls += 1;
+      prompts.push(prompt);
       return calls === 1 ? "not json" : JSON.stringify(fourActions);
     },
   });
 
   assert.equal(calls, 2);
+  assert.doesNotMatch(prompts[0] ?? "", /validation_correction/);
+  assert.match(prompts[1] ?? "", /validation_correction/);
   assert.equal(actions.length, 4);
+});
+
+test("accepts JSON wrapped in a Markdown code fence", async () => {
+  const actions = await extractCareActions({
+    sourceText: source,
+    request: async () => `\`\`\`json\n${JSON.stringify(fourActions)}\n\`\`\``,
+  });
+
+  assert.equal(actions.length, 4);
+});
+
+test("normalizes safe Gemini field variations before validation", async () => {
+  const varied = structuredClone(fourActions);
+  const action = varied.actions[0];
+  assert.ok(action);
+  action.type = "medication" as "MEDICATION";
+  action.priority = "normal" as "NORMAL";
+  action.dueDate = "2026-07-26";
+  Object.assign(action, { explanation: "An extra provider field." });
+
+  const actions = await extractCareActions({
+    sourceText: source,
+    request: async () => JSON.stringify(varied),
+  });
+
+  assert.equal(actions[0]?.type, "MEDICATION");
+  assert.equal(actions[0]?.priority, "NORMAL");
+  assert.equal(actions[0]?.dueDate, "2026-07-26T00:00:00.000Z");
+  assert.ok(!("explanation" in (actions[0] ?? {})));
+});
+
+test("reports when a document contains no explicit Care actions", async () => {
+  await assert.rejects(
+    extractCareActions({
+      sourceText: source,
+      request: async () => JSON.stringify({ actions: [] }),
+    }),
+    /No explicit trackable Care actions/,
+  );
 });
 
 test("stops after one retry when required output fields are missing", async () => {
@@ -100,5 +143,19 @@ test("rejects a source quote that is not present in the document", async () => {
       request: async () => JSON.stringify(invalid),
     }),
     /not traceable/,
+  );
+});
+
+test("sanitizes unavailable-model errors and preserves the manual fallback", async () => {
+  await assert.rejects(
+    extractCareActions({
+      sourceText: "Take Amlodipine 5 mg once daily.",
+      request: async () => {
+        throw new Error(
+          '{"error":{"code":404,"message":"This model is no longer available","status":"NOT_FOUND"}}',
+        );
+      },
+    }),
+    /configured model is not supported.*manual entry/i,
   );
 });

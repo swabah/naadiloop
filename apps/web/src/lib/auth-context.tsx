@@ -10,6 +10,7 @@ export interface AuthUser {
   role: UserRole;
   status?: string;
   patientId?: string;
+  uhid?: string;
 }
 
 interface AuthContextType {

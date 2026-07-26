@@ -1,12 +1,14 @@
 import { useNavigate } from "@tanstack/react-router";
 import {
   ArrowRight,
-  HeartHandshake,
+  KeyRound,
   Languages,
   LoaderCircle,
   Phone,
   Plus,
   RefreshCw,
+  Search,
+  ShieldCheck,
   UserRound,
   UsersRound,
 } from "lucide-react";
@@ -23,34 +25,9 @@ import {
   DialogTrigger,
 } from "../../components/ui/dialog";
 import { Input } from "../../components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../../components/ui/select";
 import { trpc } from "../../lib/trpc";
 
 type Language = "en" | "ml" | "hi";
-
-interface PatientForm {
-  name: string;
-  age: string;
-  phone: string;
-  language: Language;
-  caregiverName: string;
-  caregiverPhone: string;
-}
-
-const emptyForm: PatientForm = {
-  name: "",
-  age: "",
-  phone: "",
-  language: "en",
-  caregiverName: "",
-  caregiverPhone: "",
-};
 
 const languageLabels: Record<Language, string> = {
   en: "English",
@@ -58,73 +35,67 @@ const languageLabels: Record<Language, string> = {
   hi: "Hindi",
 };
 
-function validatePatient(form: PatientForm): string | null {
-  if (!form.name.trim()) return "Enter the Patient's name.";
-  if (form.age && (!/^\d{1,3}$/.test(form.age) || Number(form.age) > 130)) {
-    return "Age must be a whole number from 0 to 130.";
-  }
-  if (form.phone.trim() && form.phone.trim().length < 5) {
-    return "Patient phone number must have at least 5 characters.";
-  }
-  if (form.caregiverPhone.trim() && form.caregiverPhone.trim().length < 5) {
-    return "Caregiver phone number must have at least 5 characters.";
-  }
-  return null;
-}
-
 export function ProviderPatientsPage() {
   const navigate = useNavigate();
   const utils = trpc.useUtils();
   const patientsQuery = trpc.patient.list.useQuery();
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [form, setForm] = useState<PatientForm>(emptyForm);
-  const [formError, setFormError] = useState<string | null>(null);
+  const [uhidInput, setUhidInput] = useState("");
+  const [lookupUhid, setLookupUhid] = useState("");
+  const [otp, setOtp] = useState("");
+  const normalizedInput = uhidInput.trim().toUpperCase();
 
-  const createPatient = trpc.patient.create.useMutation({
+  const lookupQuery = trpc.patient.findByUhid.useQuery(
+    { uhid: lookupUhid },
+    {
+      enabled: Boolean(lookupUhid),
+      retry: false,
+    },
+  );
+
+  const linkPatient = trpc.patient.linkByUhid.useMutation({
     onSuccess: async () => {
       await utils.patient.list.invalidate();
-      setForm(emptyForm);
-      setFormError(null);
       setDialogOpen(false);
+      setUhidInput("");
+      setLookupUhid("");
+      setOtp("");
     },
   });
 
-  const updateForm = <Key extends keyof PatientForm>(key: Key, value: PatientForm[Key]) => {
-    setForm((current) => ({ ...current, [key]: value }));
+  const resetDialog = () => {
+    setUhidInput("");
+    setLookupUhid("");
+    setOtp("");
+    linkPatient.reset();
   };
 
-  const submitPatient = (event: FormEvent<HTMLFormElement>) => {
+  const searchPatient = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const validationError = validatePatient(form);
-    if (validationError) {
-      setFormError(validationError);
-      return;
+    linkPatient.reset();
+    if (normalizedInput === lookupUhid) {
+      void lookupQuery.refetch();
+    } else {
+      setLookupUhid(normalizedInput);
     }
+  };
 
-    setFormError(null);
-    createPatient.mutate({
-      name: form.name,
-      age: form.age,
-      phone: form.phone,
-      language: form.language,
-      caregiverContact: {
-        name: form.caregiverName,
-        phone: form.caregiverPhone,
-      },
-    });
+  const confirmLink = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    linkPatient.mutate({ uhid: lookupUhid, otp });
   };
 
   return (
     <section className="space-y-7">
       <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
         <div className="max-w-2xl">
-          <Badge variant="info">Provider workspace · Demo data</Badge>
+          <Badge variant="info">Provider workspace · Consent-based access</Badge>
           <h1 className="mt-4 text-3xl font-bold tracking-tight text-primary-ink sm:text-4xl">
-            Choose a Patient
+            Your Patients
           </h1>
           <p className="mt-3 text-sm leading-6 text-muted sm:text-base">
-            Start with a fictional Patient profile, then add the medical instruction that will
-            become their Care plan.
+            Patients remain independent after registration. Search their UHID and confirm consent
+            before they appear in this Hospital.
           </p>
         </div>
 
@@ -132,124 +103,133 @@ export function ProviderPatientsPage() {
           open={dialogOpen}
           onOpenChange={(open) => {
             setDialogOpen(open);
-            if (!open) {
-              setFormError(null);
-              createPatient.reset();
-            }
+            if (!open) resetDialog();
           }}
         >
           <DialogTrigger asChild>
             <Button>
               <Plus className="size-4" />
-              Add Patient
+              Link Patient
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto">
+          <DialogContent>
             <DialogHeader>
               <DialogTitle className="text-2xl font-bold text-primary-ink">
-                Add a fictional Patient
+                Link a registered Patient
               </DialogTitle>
               <DialogDescription className="text-sm leading-6 text-muted">
-                Demo data only. Do not enter real patient information.
+                Ask the Patient for their UHID. The production flow will send an OTP to their
+                registered phone.
               </DialogDescription>
             </DialogHeader>
 
-            <form className="space-y-5" onSubmit={submitPatient}>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <label className="space-y-2 sm:col-span-2" htmlFor="patient-name">
-                  <span className="text-sm font-semibold">Patient name *</span>
-                  <Input
-                    id="patient-name"
-                    value={form.name}
-                    onChange={(event) => updateForm("name", event.target.value)}
-                    placeholder="e.g. Maya Thomas"
-                    autoComplete="off"
-                    maxLength={160}
-                  />
-                </label>
-                <label className="space-y-2" htmlFor="patient-age">
-                  <span className="text-sm font-semibold">Age</span>
-                  <Input
-                    id="patient-age"
-                    value={form.age}
-                    onChange={(event) => updateForm("age", event.target.value)}
-                    placeholder="e.g. 62"
-                    inputMode="numeric"
-                    maxLength={3}
-                  />
-                </label>
-                <label className="space-y-2" htmlFor="patient-phone">
-                  <span className="text-sm font-semibold">Phone</span>
-                  <Input
-                    id="patient-phone"
-                    value={form.phone}
-                    onChange={(event) => updateForm("phone", event.target.value)}
-                    placeholder="Fictional number"
-                    inputMode="tel"
-                    autoComplete="off"
-                    maxLength={32}
-                  />
-                </label>
-                <div className="space-y-2 sm:col-span-2">
-                  <span className="text-sm font-semibold">Preferred language</span>
-                  <Select
-                    value={form.language}
-                    onValueChange={(value: Language) => updateForm("language", value)}
-                  >
-                    <SelectTrigger aria-label="Preferred language">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent position="popper">
-                      <SelectItem value="en">English</SelectItem>
-                      <SelectItem value="ml">Malayalam</SelectItem>
-                      <SelectItem value="hi">Hindi</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="rounded-2xl bg-primary-soft/55 p-4">
-                <div className="mb-3 flex items-center gap-2">
-                  <HeartHandshake className="size-4 text-primary" />
-                  <h2 className="text-sm font-bold text-primary-ink">Caregiver contact</h2>
-                  <span className="text-xs text-muted">Optional</span>
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Input
-                    value={form.caregiverName}
-                    onChange={(event) => updateForm("caregiverName", event.target.value)}
-                    placeholder="Caregiver name"
-                    aria-label="Caregiver name"
-                    autoComplete="off"
-                    maxLength={160}
-                  />
-                  <Input
-                    value={form.caregiverPhone}
-                    onChange={(event) => updateForm("caregiverPhone", event.target.value)}
-                    placeholder="Fictional number"
-                    aria-label="Caregiver phone"
-                    inputMode="tel"
-                    autoComplete="off"
-                    maxLength={32}
-                  />
-                </div>
-              </div>
-
-              {formError || createPatient.error ? (
-                <p className="rounded-xl bg-warning/10 px-4 py-3 text-sm text-warning" role="alert">
-                  {formError ?? "The Patient could not be saved. Check the details and try again."}
-                </p>
-              ) : null}
-
-              <Button type="submit" className="w-full" disabled={createPatient.isPending}>
-                {createPatient.isPending ? (
+            <form className="space-y-4" onSubmit={searchPatient}>
+              <label className="space-y-2" htmlFor="patient-uhid">
+                <span className="text-sm font-semibold">Patient UHID</span>
+                <Input
+                  id="patient-uhid"
+                  value={uhidInput}
+                  onChange={(event) => {
+                    setUhidInput(event.target.value.toUpperCase());
+                    if (lookupUhid) {
+                      setLookupUhid("");
+                      setOtp("");
+                    }
+                  }}
+                  placeholder="UHID-..."
+                  autoComplete="off"
+                  spellCheck={false}
+                  required
+                />
+              </label>
+              <Button
+                type="submit"
+                variant="outline"
+                className="w-full"
+                disabled={!normalizedInput || lookupQuery.isFetching}
+              >
+                {lookupQuery.isFetching ? (
                   <LoaderCircle className="size-4 animate-spin" />
                 ) : (
-                  <Plus className="size-4" />
+                  <Search className="size-4" />
                 )}
-                {createPatient.isPending ? "Saving Patient…" : "Save Patient"}
+                {lookupQuery.isFetching ? "Searching…" : "Search UHID"}
               </Button>
             </form>
+
+            {lookupQuery.isError ? (
+              <p className="rounded-xl bg-warning/10 px-4 py-3 text-sm text-warning" role="alert">
+                {lookupQuery.error.message}
+              </p>
+            ) : null}
+
+            {lookupQuery.data ? (
+              <div className="space-y-4 rounded-2xl border border-primary/20 bg-primary-soft/35 p-4">
+                <div className="flex items-start gap-3">
+                  <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-white text-primary">
+                    <UserRound className="size-5" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-primary-ink">{lookupQuery.data.patient.name}</p>
+                    <p className="mt-1 font-mono text-xs text-muted">
+                      {lookupQuery.data.patient.uhid}
+                    </p>
+                    <p className="mt-1 text-xs text-muted">
+                      OTP destination: phone {lookupQuery.data.patient.phoneHint}
+                    </p>
+                  </div>
+                </div>
+
+                {lookupQuery.data.alreadyAssigned ? (
+                  <p className="rounded-xl bg-success/10 px-4 py-3 text-sm text-success-ink">
+                    This Patient is already linked to your Hospital.
+                  </p>
+                ) : (
+                  <form className="space-y-3" onSubmit={confirmLink}>
+                    <div className="rounded-xl bg-white p-3 text-xs leading-5 text-muted">
+                      <span className="font-bold text-primary-ink">MVP demo OTP:</span> use{" "}
+                      <span className="font-mono font-bold text-primary">000000</span>. No real
+                      message is sent.
+                    </div>
+                    <label className="space-y-2" htmlFor="patient-otp">
+                      <span className="text-sm font-semibold">Six-digit OTP</span>
+                      <Input
+                        id="patient-otp"
+                        value={otp}
+                        onChange={(event) =>
+                          setOtp(event.target.value.replace(/\D/g, "").slice(0, 6))
+                        }
+                        placeholder="000000"
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        maxLength={6}
+                        required
+                      />
+                    </label>
+                    {linkPatient.error ? (
+                      <p
+                        className="rounded-xl bg-warning/10 px-4 py-3 text-sm text-warning"
+                        role="alert"
+                      >
+                        {linkPatient.error.message}
+                      </p>
+                    ) : null}
+                    <Button
+                      type="submit"
+                      className="w-full"
+                      disabled={otp.length !== 6 || linkPatient.isPending}
+                    >
+                      {linkPatient.isPending ? (
+                        <LoaderCircle className="size-4 animate-spin" />
+                      ) : (
+                        <ShieldCheck className="size-4" />
+                      )}
+                      {linkPatient.isPending ? "Confirming…" : "Confirm consent and link"}
+                    </Button>
+                  </form>
+                )}
+              </div>
+            ) : null}
           </DialogContent>
         </Dialog>
       </div>
@@ -268,12 +248,10 @@ export function ProviderPatientsPage() {
 
       {patientsQuery.isError ? (
         <Card className="flex min-h-64 flex-col items-center justify-center p-7 text-center">
-          <div className="grid size-12 place-items-center rounded-2xl bg-warning/10 text-warning">
-            <RefreshCw className="size-5" />
-          </div>
+          <RefreshCw className="size-8 text-warning" />
           <h2 className="mt-4 text-lg font-bold text-primary-ink">Patients could not be loaded</h2>
           <p className="mt-2 max-w-md text-sm leading-6 text-muted">
-            Make sure the Provider demo view is selected, then try the request again.
+            Refresh the page or sign in again, then retry.
           </p>
           <Button variant="outline" className="mt-5" onClick={() => void patientsQuery.refetch()}>
             <RefreshCw className="size-4" />
@@ -287,13 +265,14 @@ export function ProviderPatientsPage() {
           <div className="grid size-14 place-items-center rounded-2xl bg-primary-soft text-primary">
             <UsersRound className="size-6" />
           </div>
-          <h2 className="mt-4 text-xl font-bold text-primary-ink">No Patients yet</h2>
+          <h2 className="mt-4 text-xl font-bold text-primary-ink">No linked Patients yet</h2>
           <p className="mt-2 max-w-md text-sm leading-6 text-muted">
-            Add a fictional Patient to begin the Provider workflow.
+            Search a registered Patient&apos;s UHID and confirm the demo OTP to add them to this
+            Hospital.
           </p>
           <Button className="mt-5" onClick={() => setDialogOpen(true)}>
-            <Plus className="size-4" />
-            Add the first Patient
+            <KeyRound className="size-4" />
+            Link the first Patient
           </Button>
         </Card>
       ) : null}
@@ -303,16 +282,17 @@ export function ProviderPatientsPage() {
           {patientsQuery.data.map((patient) => (
             <Card
               key={patient.id}
-              className="group flex min-h-56 flex-col p-5 transition hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-lg"
+              className="group flex min-h-60 flex-col p-5 transition hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-lg"
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="grid size-12 shrink-0 place-items-center rounded-2xl bg-primary-soft text-primary">
                   <UserRound className="size-5" />
                 </div>
-                <Badge variant="neutral">Fictional</Badge>
+                <Badge variant="success">Consent linked</Badge>
               </div>
               <h2 className="mt-5 text-xl font-bold text-primary-ink">{patient.name}</h2>
-              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2 text-xs text-muted">
+              <p className="mt-1 break-all font-mono text-[11px] text-muted">{patient.uhid}</p>
+              <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-xs text-muted">
                 {patient.age ? <span>Age {patient.age}</span> : null}
                 <span className="flex items-center gap-1">
                   <Languages className="size-3.5" />
@@ -321,7 +301,7 @@ export function ProviderPatientsPage() {
                 {patient.phone ? (
                   <span className="flex items-center gap-1">
                     <Phone className="size-3.5" />
-                    Contact added
+                    Phone verified
                   </span>
                 ) : null}
               </div>
@@ -330,12 +310,12 @@ export function ProviderPatientsPage() {
                 className="mt-auto w-full"
                 onClick={() =>
                   void navigate({
-                    to: "/provider/patients/$patientId/document",
+                    to: "/provider/patients/$patientId",
                     params: { patientId: patient.id },
                   })
                 }
               >
-                Continue care journey
+                View Patient workspace
                 <ArrowRight className="size-4 transition group-hover:translate-x-0.5" />
               </Button>
             </Card>

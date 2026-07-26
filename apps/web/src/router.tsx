@@ -1,23 +1,87 @@
-import { createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
+import {
+  createRootRoute,
+  createRoute,
+  createRouter,
+  lazyRouteComponent,
+} from "@tanstack/react-router";
 import { z } from "zod";
 import { AppShell } from "./components/app-shell";
-import { LandingPage } from "./routes";
-import { AdminApprovalsPage } from "./routes/admin/approvals";
-import { LoginPage } from "./routes/login";
-import { PatientActionPage } from "./routes/patient/action";
-import { PatientHelpPage } from "./routes/patient/help";
-import { PatientJourneyPage } from "./routes/patient/journey";
-import { PatientNextPage } from "./routes/patient/next";
-import { PatientReportPage } from "./routes/patient/report";
-import { ProviderDashboardPage } from "./routes/provider/dashboard";
-import { ProviderDocumentPage } from "./routes/provider/document";
-import { ProviderPatientsPage } from "./routes/provider/patients";
-import { ProviderReportPage } from "./routes/provider/report";
-import { ProviderVerifyPage } from "./routes/provider/verify";
-import { RegisterPage } from "./routes/register";
+
+const LandingPage = lazyRouteComponent(() => import("./routes"), "LandingPage");
+const LoginPage = lazyRouteComponent(() => import("./routes/login"), "LoginPage");
+const RegisterPage = lazyRouteComponent(() => import("./routes/register"), "RegisterPage");
+const AdminApprovalsPage = lazyRouteComponent(
+  () => import("./routes/admin/approvals"),
+  "AdminApprovalsPage",
+);
+const PatientActionPage = lazyRouteComponent(
+  () => import("./routes/patient/action"),
+  "PatientActionPage",
+);
+const PatientHelpPage = lazyRouteComponent(
+  () => import("./routes/patient/help"),
+  "PatientHelpPage",
+);
+const PatientJourneyPage = lazyRouteComponent(
+  () => import("./routes/patient/journey"),
+  "PatientJourneyPage",
+);
+const PatientNextPage = lazyRouteComponent(
+  () => import("./routes/patient/next"),
+  "PatientNextPage",
+);
+const PatientReportPage = lazyRouteComponent(
+  () => import("./routes/patient/report"),
+  "PatientReportPage",
+);
+const ProviderDashboardPage = lazyRouteComponent(
+  () => import("./routes/provider/dashboard"),
+  "ProviderDashboardPage",
+);
+const ProviderDocumentPage = lazyRouteComponent(
+  () => import("./routes/provider/document"),
+  "ProviderDocumentPage",
+);
+const ProviderPatientsPage = lazyRouteComponent(
+  () => import("./routes/provider/patients"),
+  "ProviderPatientsPage",
+);
+const ProviderPatientPage = lazyRouteComponent(
+  () => import("./routes/provider/patient"),
+  "ProviderPatientPage",
+);
+const ProviderReportPage = lazyRouteComponent(
+  () => import("./routes/provider/report"),
+  "ProviderReportPage",
+);
+const ProviderVerifyPage = lazyRouteComponent(
+  () => import("./routes/provider/verify"),
+  "ProviderVerifyPage",
+);
 
 const rootRoute = createRootRoute({
   component: AppShell,
+  errorComponent: ({ error, reset }) => (
+    <div className="mx-auto max-w-xl py-20 text-center">
+      <p className="text-sm font-bold uppercase tracking-wider text-danger">Something went wrong</p>
+      <h1 className="mt-3 text-3xl font-bold text-primary-ink">This page could not be loaded.</h1>
+      <p className="mt-4 text-sm text-text-muted">
+        {error instanceof Error ? error.message : "An unexpected application error occurred."}
+      </p>
+      <div className="mt-8 flex justify-center gap-3">
+        <button
+          type="button"
+          className="rounded-xl bg-primary px-5 py-3 font-bold text-white"
+          onClick={reset}
+        >
+          Try again
+        </button>
+        <a className="rounded-xl border border-border px-5 py-3 font-bold text-primary" href="/">
+          Return home
+        </a>
+      </div>
+    </div>
+  ),
   notFoundComponent: () => (
     <div className="py-20 text-center">
       <p className="text-sm font-bold uppercase tracking-wider text-primary">404</p>
@@ -36,6 +100,12 @@ const providerPatientsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/provider/patients",
   component: ProviderPatientsPage,
+});
+
+const providerPatientRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/provider/patients/$patientId",
+  component: ProviderPatientPage,
 });
 
 const providerDocumentRoute = createRoute({
@@ -123,6 +193,7 @@ const routeTree = rootRoute.addChildren([
   loginRoute,
   adminApprovalsRoute,
   providerPatientsRoute,
+  providerPatientRoute,
   providerDocumentRoute,
   providerVerifyRoute,
   providerDashboardRoute,

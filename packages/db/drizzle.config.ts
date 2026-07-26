@@ -1,6 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { config } from "dotenv";
 import { defineConfig } from "drizzle-kit";
+import { withStrictPostgresSslMode } from "./src/connection-string";
 
 config({ path: fileURLToPath(new URL("../../.env", import.meta.url)), quiet: true });
 
@@ -15,7 +16,8 @@ if (!url) {
 export default defineConfig({
   dialect: "postgresql",
   schema: "./src/schema.ts",
-  dbCredentials: { url },
+  out: "./migrations",
+  dbCredentials: { url: withStrictPostgresSslMode(url) },
   strict: true,
   verbose: true,
 });

@@ -1,7 +1,8 @@
 import { fileURLToPath } from "node:url";
 import bcrypt from "bcryptjs";
 import { config } from "dotenv";
-import { getDb, initializeDatabaseSchema } from "./client";
+import { inArray } from "drizzle-orm";
+import { getDb } from "./client";
 import {
   actionEvents,
   careActions,
@@ -10,10 +11,12 @@ import {
   DEMO_PROVIDER_ID,
   organizationDetails,
   patients,
+  providerPatientAssignments,
   reports,
   sourceDocuments,
   users,
 } from "./schema";
+import { uhidFromPatientId } from "./uhid";
 
 config({ path: fileURLToPath(new URL("../../../.env", import.meta.url)), quiet: true });
 
@@ -26,20 +29,28 @@ const SUPER_ADMIN_PASSWORD = process.env.SUPER_ADMIN_PASSWORD || "admin123";
 const ids = {
   document: "30000000-0000-4000-8000-000000000001",
   draftDocument: "30000000-0000-4000-8000-000000000002",
+  closedDocument: "30000000-0000-4000-8000-000000000003",
   plan: "40000000-0000-4000-8000-000000000001",
   draftPlan: "40000000-0000-4000-8000-000000000002",
+  closedPlan: "40000000-0000-4000-8000-000000000003",
   medication: "50000000-0000-4000-8000-000000000001",
   test: "50000000-0000-4000-8000-000000000002",
   referral: "50000000-0000-4000-8000-000000000003",
   followUp: "50000000-0000-4000-8000-000000000004",
   draftMedication: "50000000-0000-4000-8000-000000000005",
   draftTest: "50000000-0000-4000-8000-000000000006",
+  closedTest: "50000000-0000-4000-8000-000000000007",
   report: "60000000-0000-4000-8000-000000000001",
+  closedReport: "60000000-0000-4000-8000-000000000002",
   events: [
     "70000000-0000-4000-8000-000000000001",
     "70000000-0000-4000-8000-000000000002",
     "70000000-0000-4000-8000-000000000003",
     "70000000-0000-4000-8000-000000000004",
+    "70000000-0000-4000-8000-000000000005",
+    "70000000-0000-4000-8000-000000000006",
+    "70000000-0000-4000-8000-000000000007",
+    "70000000-0000-4000-8000-000000000008",
   ],
 } as const;
 
@@ -52,7 +63,6 @@ const daysFromNow = (days: number) => {
 
 async function seed() {
   const db = getDb(process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL);
-  await initializeDatabaseSchema(db);
   const now = new Date();
 
   // Hash passwords
@@ -107,7 +117,6 @@ async function seed() {
         phone: "+91 98765 43210",
         role: "patient",
         status: "active",
-        aadhaarNumber: "123456789012",
       },
       {
         id: PENDING_ADMIN_ID,
@@ -153,6 +162,7 @@ async function seed() {
 
     .values({
       id: DEMO_PATIENT_ID,
+      uhid: uhidFromPatientId(DEMO_PATIENT_ID),
       name: "Rajan Menon",
       age: "55",
       phone: "+91 98765 43210",
@@ -162,6 +172,7 @@ async function seed() {
     .onConflictDoUpdate({
       target: patients.id,
       set: {
+        uhid: uhidFromPatientId(DEMO_PATIENT_ID),
         name: "Rajan Menon",
         age: "55",
         phone: "+91 98765 43210",
@@ -169,6 +180,11 @@ async function seed() {
         caregiverContact: { name: "Maya Menon", phone: "+91 98765 43211" },
       },
     });
+
+  await db
+    .insert(providerPatientAssignments)
+    .values({ providerId: DEMO_PROVIDER_ID, patientId: DEMO_PATIENT_ID })
+    .onConflictDoNothing();
 
   await db
     .insert(sourceDocuments)
@@ -187,6 +203,13 @@ async function seed() {
         content:
           "Start Metformin 500 mg twice daily with meals. Schedule an HbA1c test in fourteen days. Book a dietitian consultation next month. Return to the PHC in thirty days for review.",
       },
+      {
+        id: ids.closedDocument,
+        patientId: DEMO_PATIENT_ID,
+        documentType: "lab_form",
+        content:
+          "Complete a fasting blood sugar test and return the report to the Provider for review.",
+      },
     ])
     .onConflictDoUpdate({
       target: sourceDocuments.id,
@@ -195,27 +218,56 @@ async function seed() {
 
   await db
     .insert(carePlans)
-    .values([
-      {
-        id: ids.plan,
-        patientId: DEMO_PATIENT_ID,
-        providerId: DEMO_PROVIDER_ID,
-        sourceDocumentId: ids.document,
-        status: "active",
-        verifiedAt: now,
-      },
-      {
-        id: ids.draftPlan,
-        patientId: DEMO_PATIENT_ID,
-        providerId: DEMO_PROVIDER_ID,
-        sourceDocumentId: ids.draftDocument,
-        status: "draft",
-      },
-    ])
+    .values({
+      id: ids.plan,
+      patientId: DEMO_PATIENT_ID,
+      providerId: DEMO_PROVIDER_ID,
+      sourceDocumentId: ids.document,
+      status: "active",
+      verifiedAt: now,
+    })
     .onConflictDoUpdate({
       target: carePlans.id,
       set: { status: "active", verifiedAt: now, sourceDocumentId: ids.document },
     });
+
+  await db
+    .insert(carePlans)
+    .values({
+      id: ids.draftPlan,
+      patientId: DEMO_PATIENT_ID,
+      providerId: DEMO_PROVIDER_ID,
+      sourceDocumentId: ids.draftDocument,
+      status: "draft",
+    })
+    .onConflictDoUpdate({
+      target: carePlans.id,
+      set: { status: "draft", verifiedAt: null, sourceDocumentId: ids.draftDocument },
+    });
+
+  await db
+    .insert(carePlans)
+    .values({
+      id: ids.closedPlan,
+      patientId: DEMO_PATIENT_ID,
+      providerId: DEMO_PROVIDER_ID,
+      sourceDocumentId: ids.closedDocument,
+      status: "closed",
+      verifiedAt: daysFromNow(-14),
+      createdAt: daysFromNow(-15),
+    })
+    .onConflictDoUpdate({
+      target: carePlans.id,
+      set: {
+        status: "closed",
+        verifiedAt: daysFromNow(-14),
+        sourceDocumentId: ids.closedDocument,
+      },
+    });
+
+  await db
+    .delete(careActions)
+    .where(inArray(careActions.carePlanId, [ids.plan, ids.draftPlan, ids.closedPlan]));
 
   await db
     .insert(careActions)
@@ -276,6 +328,23 @@ async function seed() {
         verified: true,
         payload: { reason: "Review symptoms and CBC result" },
       },
+      {
+        id: ids.closedTest,
+        carePlanId: ids.closedPlan,
+        type: "TEST",
+        title: "Complete fasting blood sugar test",
+        instructions: "Complete the test and return the report for Provider review.",
+        dueDate: daysFromNow(-10),
+        status: "CLOSED",
+        priority: "NORMAL",
+        sourceText:
+          "Complete a fasting blood sugar test and return the report to the Provider for review.",
+        reviewRequired: true,
+        verified: true,
+        nextStepCommunicated: true,
+        payload: { testName: "Fasting blood sugar" },
+        createdAt: daysFromNow(-15),
+      },
     ])
     .onConflictDoUpdate({
       target: careActions.id,
@@ -321,13 +390,38 @@ async function seed() {
     .values({
       id: ids.report,
       careActionId: ids.test,
-      fileUrl: "https://example.invalid/demo/cbc-report.pdf",
+      fileName: "fictional-cbc-report.pdf",
+      fileType: "application/pdf",
+      fileSize: 42_000,
       status: "AWAITING_REVIEW",
       uploadedAt: now,
     })
     .onConflictDoUpdate({
       target: reports.id,
       set: { status: "AWAITING_REVIEW", uploadedAt: now, reviewedAt: null },
+    });
+
+  await db
+    .insert(reports)
+    .values({
+      id: ids.closedReport,
+      careActionId: ids.closedTest,
+      fileName: "fictional-fasting-blood-sugar.pdf",
+      fileType: "application/pdf",
+      fileSize: 38_000,
+      status: "REVIEWED",
+      providerComment: "Reviewed with the Patient. Continue the current follow-up plan.",
+      uploadedAt: daysFromNow(-11),
+      reviewedAt: daysFromNow(-10),
+    })
+    .onConflictDoUpdate({
+      target: reports.id,
+      set: {
+        status: "REVIEWED",
+        providerComment: "Reviewed with the Patient. Continue the current follow-up plan.",
+        uploadedAt: daysFromNow(-11),
+        reviewedAt: daysFromNow(-10),
+      },
     });
 
   await db
@@ -360,6 +454,42 @@ async function seed() {
         eventType: "created",
         createdBy: "system",
         notes: "Seeded overdue referral for the provider dashboard.",
+      },
+      {
+        id: ids.events[4],
+        careActionId: ids.closedTest,
+        patientId: DEMO_PATIENT_ID,
+        eventType: "created",
+        createdBy: "system",
+        notes: "Created from the fictional lab instruction.",
+        timestamp: daysFromNow(-15),
+      },
+      {
+        id: ids.events[5],
+        careActionId: ids.closedTest,
+        patientId: DEMO_PATIENT_ID,
+        eventType: "completed",
+        createdBy: "patient",
+        notes: "Patient completed the test and returned the report.",
+        timestamp: daysFromNow(-11),
+      },
+      {
+        id: ids.events[6],
+        careActionId: ids.closedTest,
+        patientId: DEMO_PATIENT_ID,
+        eventType: "reviewed",
+        createdBy: "provider",
+        notes: "Provider reviewed the report and communicated the next step.",
+        timestamp: daysFromNow(-10),
+      },
+      {
+        id: ids.events[7],
+        careActionId: ids.closedTest,
+        patientId: DEMO_PATIENT_ID,
+        eventType: "closed",
+        createdBy: "provider",
+        notes: "Loop closed after review and next-step communication.",
+        timestamp: daysFromNow(-10),
       },
     ])
     .onConflictDoNothing();

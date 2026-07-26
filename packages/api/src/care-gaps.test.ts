@@ -72,6 +72,18 @@ test("CG-4 flags support requests", () => {
   assert.equal(gaps[0]?.rule, "CG-4");
 });
 
+test("CG-4 clears after a later Provider resolution", () => {
+  const gaps = evaluateCareGaps(
+    {
+      action: { ...baseAction, dueDate: null },
+      reports: [],
+      events: [event("help", "help_requested"), event("resolved", "help_resolved", 1)],
+    },
+    now,
+  );
+  assert.equal(gaps.length, 0);
+});
+
 test("CG-5 requires the two latest medication outcomes to be unconfirmed", () => {
   const action = { ...baseAction, type: "MEDICATION" as const, dueDate: null };
   assert.equal(

@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import { Building2, CheckCircle2, Clock, ShieldCheck, User, UserCheck } from "lucide-react";
 import type React from "react";
 import { useState } from "react";
@@ -8,11 +8,14 @@ type RegisterRoleTab = "patient" | "admin";
 type AdminSubRole = "hospital_admin" | "pharmacy_admin";
 
 export function RegisterPage() {
-  const _navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<RegisterRoleTab>("patient");
   const [adminRole, setAdminRole] = useState<AdminSubRole>("hospital_admin");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [successInfo, setSuccessInfo] = useState<{ message: string; status: string } | null>(null);
+  const [successInfo, setSuccessInfo] = useState<{
+    message: string;
+    status: string;
+    uhid: string | null;
+  } | null>(null);
 
   // Common Form State
   const [name, setName] = useState("");
@@ -21,7 +24,6 @@ export function RegisterPage() {
   const [phone, setPhone] = useState("");
 
   // Patient Form State
-  const [aadhaarNumber, setAadhaarNumber] = useState("");
   const [age, setAge] = useState("");
   const [gender, setGender] = useState("male");
   const [language, setLanguage] = useState("en");
@@ -40,6 +42,7 @@ export function RegisterPage() {
       setSuccessInfo({
         message: data.message,
         status: data.status,
+        uhid: data.uhid,
       });
     },
     onError: (err) => {
@@ -53,13 +56,7 @@ export function RegisterPage() {
 
     const targetRole = activeTab === "patient" ? "patient" : adminRole;
 
-    if (targetRole === "patient") {
-      const cleanAadhaar = aadhaarNumber.replace(/\s+/g, "");
-      if (!/^\d{12}$/.test(cleanAadhaar)) {
-        setErrorMessage("Please enter a valid 12-digit Aadhaar number.");
-        return;
-      }
-    } else {
+    if (targetRole !== "patient") {
       if (!orgName.trim() || !licenseNumber.trim()) {
         setErrorMessage(
           "Organization name and license number are required for administration registration.",
@@ -74,7 +71,6 @@ export function RegisterPage() {
       password,
       phone: phone || undefined,
       role: targetRole,
-      aadhaarNumber: targetRole === "patient" ? aadhaarNumber : undefined,
       age: targetRole === "patient" ? age : undefined,
       gender: targetRole === "patient" ? gender : undefined,
       language: targetRole === "patient" ? language : "en",
@@ -87,49 +83,57 @@ export function RegisterPage() {
     });
   };
 
-  const formatAadhaar = (val: string) => {
-    const raw = val.replace(/\D/g, "").slice(0, 12);
-    const parts = raw.match(/.{1,4}/g);
-    return parts ? parts.join(" ") : raw;
-  };
-
   return (
-    <div className="mx-auto max-w-2xl py-10 px-4">
+    <div className="mx-auto max-w-4xl py-4 sm:py-8">
       {/* Header */}
       <div className="mb-8 text-center">
-        <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-primary/10 text-primary mb-3">
+        <div className="mb-4 inline-flex size-13 items-center justify-center rounded-2xl bg-primary-soft text-primary">
           <ShieldCheck className="w-6 h-6" />
         </div>
-        <h1 className="text-3xl font-extrabold text-primary-ink font-display">
-          Create Your Account
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">Join Naadi</p>
+        <h1 className="mt-2 text-3xl font-extrabold text-primary-ink sm:text-4xl">
+          Create your account
         </h1>
-        <p className="mt-2 text-sm text-muted">
-          Register as a Patient for instant care access or as an Administration user
-          (Hospital/Pharmacy) pending Super Admin approval.
+        <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-muted">
+          Patients receive an independent UHID. Hospital and Pharmacy workspaces require platform
+          approval.
         </p>
       </div>
 
       {/* Success Notification View */}
       {successInfo ? (
-        <div className="rounded-2xl border border-teal-200 bg-teal-50/75 p-8 text-center shadow-sm">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-teal-100 text-teal-700 mb-4">
+        <div className="app-panel rounded-[2rem] p-6 text-center sm:p-10">
+          <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-2xl bg-success/10 text-success-ink">
             {successInfo.status === "active" ? (
               <CheckCircle2 className="h-8 w-8" />
             ) : (
               <Clock className="h-8 w-8 text-amber-600" />
             )}
           </div>
-          <h2 className="text-2xl font-bold text-teal-900">
+          <h2 className="text-2xl font-bold text-primary-ink">
             {successInfo.status === "active" ? "Registration Approved!" : "Application Submitted!"}
           </h2>
-          <p className="mt-3 text-sm text-teal-800 leading-relaxed max-w-md mx-auto">
+          <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-muted">
             {successInfo.message}
           </p>
+          {successInfo.uhid ? (
+            <div className="mx-auto mt-5 max-w-md rounded-2xl border border-primary/15 bg-primary-soft/45 p-4">
+              <p className="text-xs font-bold uppercase tracking-wider text-primary">
+                Your unique UHID
+              </p>
+              <p className="mt-2 break-all font-mono text-sm font-bold text-primary-ink">
+                {successInfo.uhid}
+              </p>
+              <p className="mt-2 text-xs leading-5 text-muted">
+                Keep this ID safe. Give it to a Hospital only when you want them to add you.
+              </p>
+            </div>
+          ) : null}
 
           <div className="mt-6 flex justify-center gap-4">
             <Link
               to="/login"
-              className="inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-2.5 text-sm font-semibold text-white shadow hover:bg-primary-ink transition-colors"
+              className="inline-flex h-11 items-center gap-2 rounded-xl bg-primary px-6 text-sm font-bold text-white shadow-sm transition hover:bg-[#1d55d8]"
             >
               Proceed to Login
             </Link>
@@ -141,49 +145,50 @@ export function RegisterPage() {
                 setEmail("");
                 setPassword("");
               }}
-              className="rounded-xl border border-teal-300 px-5 py-2.5 text-sm font-semibold text-teal-800 hover:bg-teal-100/50"
+              className="h-11 rounded-xl border border-border bg-white px-5 text-sm font-bold text-primary-ink transition hover:border-primary/25 hover:bg-primary-soft/40"
             >
-              Register Another Account
+              Register another account
             </button>
           </div>
         </div>
       ) : (
-        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <div className="app-panel rounded-[2rem] p-5 sm:p-8">
           {/* Tab Selector */}
-          <div className="grid grid-cols-2 gap-2 rounded-xl bg-gray-100/80 p-1 mb-6">
+          <div className="mb-7 grid grid-cols-2 gap-2 rounded-2xl bg-primary-soft/65 p-1.5">
             <button
               type="button"
               onClick={() => setActiveTab("patient")}
-              className={`flex items-center justify-center gap-2 py-3 rounded-lg text-sm font-semibold transition-all ${
+              className={`flex items-center justify-center gap-2 rounded-xl px-2 py-3 text-xs font-bold transition-all sm:text-sm ${
                 activeTab === "patient"
                   ? "bg-white text-primary shadow-sm"
                   : "text-muted hover:text-primary-ink"
               }`}
             >
               <User className="w-4 h-4" />
-              Patient Registration
+              Patient
             </button>
             <button
               type="button"
               onClick={() => setActiveTab("admin")}
-              className={`flex items-center justify-center gap-2 py-3 rounded-lg text-sm font-semibold transition-all ${
+              className={`flex items-center justify-center gap-2 rounded-xl px-2 py-3 text-xs font-bold transition-all sm:text-sm ${
                 activeTab === "admin"
                   ? "bg-white text-primary shadow-sm"
                   : "text-muted hover:text-primary-ink"
               }`}
             >
               <Building2 className="w-4 h-4" />
-              Administration Registration
+              Hospital / Pharmacy
             </button>
           </div>
 
           {/* Tab Info Banners */}
           {activeTab === "patient" ? (
-            <div className="mb-6 rounded-lg bg-teal-50 border border-teal-200 p-3.5 flex items-start gap-3">
-              <UserCheck className="w-5 h-5 text-teal-700 mt-0.5 shrink-0" />
-              <div className="text-xs text-teal-800 leading-relaxed">
-                <span className="font-bold">Instant Activation:</span> Patient accounts require a
-                12-digit Aadhaar number for unique verification and are auto-approved instantly.
+            <div className="mb-6 flex items-start gap-3 rounded-2xl border border-primary/15 bg-primary-soft/40 p-4">
+              <UserCheck className="mt-0.5 size-5 shrink-0 text-primary" />
+              <div className="text-xs leading-relaxed text-primary-ink">
+                <span className="font-bold">Independent Patient identity:</span> Registration
+                creates a unique UHID. You will not appear in any Hospital until you share it and
+                approve the Hospital link.
               </div>
             </div>
           ) : (
@@ -221,7 +226,7 @@ export function RegisterPage() {
                   placeholder="e.g. Rajan Menon"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-3.5 py-2 text-sm focus:border-primary focus:outline-none"
+                  className="h-13 w-full rounded-2xl border border-border bg-[#f9faff] px-4 text-sm font-medium outline-none transition focus:border-primary/55 focus:bg-white focus:ring-4 focus:ring-primary/10"
                 />
               </div>
 
@@ -239,7 +244,7 @@ export function RegisterPage() {
                   placeholder="user@example.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-3.5 py-2 text-sm focus:border-primary focus:outline-none"
+                  className="h-13 w-full rounded-2xl border border-border bg-[#f9faff] px-4 text-sm font-medium outline-none transition focus:border-primary/55 focus:bg-white focus:ring-4 focus:ring-primary/10"
                 />
               </div>
             </div>
@@ -260,7 +265,7 @@ export function RegisterPage() {
                   placeholder="Minimum 6 characters"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-3.5 py-2 text-sm focus:border-primary focus:outline-none"
+                  className="h-13 w-full rounded-2xl border border-border bg-[#f9faff] px-4 text-sm font-medium outline-none transition focus:border-primary/55 focus:bg-white focus:ring-4 focus:ring-primary/10"
                 />
               </div>
 
@@ -269,15 +274,17 @@ export function RegisterPage() {
                   htmlFor="register-phone"
                   className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1"
                 >
-                  Phone Number
+                  Phone Number{" "}
+                  {activeTab === "patient" ? <span className="text-red-500">*</span> : null}
                 </label>
                 <input
                   id="register-phone"
                   type="tel"
+                  required={activeTab === "patient"}
                   placeholder="+91 98765 43210"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-3.5 py-2 text-sm focus:border-primary focus:outline-none"
+                  className="h-13 w-full rounded-2xl border border-border bg-[#f9faff] px-4 text-sm font-medium outline-none transition focus:border-primary/55 focus:bg-white focus:ring-4 focus:ring-primary/10"
                 />
               </div>
             </div>
@@ -285,29 +292,8 @@ export function RegisterPage() {
             {/* Patient Fields */}
             {activeTab === "patient" && (
               <>
-                <hr className="my-4 border-gray-100" />
+                <hr className="my-4 border-border" />
                 <div className="space-y-4">
-                  <div>
-                    <label
-                      htmlFor="register-aadhaar"
-                      className="block text-xs font-semibold uppercase tracking-wider text-muted mb-1"
-                    >
-                      Aadhaar Number (12 Digits) <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      id="register-aadhaar"
-                      type="text"
-                      required
-                      placeholder="1234 5678 9012"
-                      value={aadhaarNumber}
-                      onChange={(e) => setAadhaarNumber(formatAadhaar(e.target.value))}
-                      className="w-full rounded-lg border border-gray-300 px-3.5 py-2 text-sm font-mono tracking-widest focus:border-primary focus:outline-none"
-                    />
-                    <p className="mt-1 text-xs text-muted">
-                      Unique national health identification key used for patient deduplication.
-                    </p>
-                  </div>
-
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                       <label
@@ -322,7 +308,7 @@ export function RegisterPage() {
                         placeholder="55"
                         value={age}
                         onChange={(e) => setAge(e.target.value)}
-                        className="w-full rounded-lg border border-gray-300 px-3.5 py-2 text-sm focus:border-primary focus:outline-none"
+                        className="h-13 w-full rounded-2xl border border-border bg-[#f9faff] px-4 text-sm font-medium outline-none transition focus:border-primary/55 focus:bg-white focus:ring-4 focus:ring-primary/10"
                       />
                     </div>
                     <div>
@@ -336,7 +322,7 @@ export function RegisterPage() {
                         id="register-gender"
                         value={gender}
                         onChange={(e) => setGender(e.target.value)}
-                        className="w-full rounded-lg border border-gray-300 px-3.5 py-2 text-sm focus:border-primary focus:outline-none"
+                        className="h-13 w-full rounded-2xl border border-border bg-[#f9faff] px-4 text-sm font-medium outline-none transition focus:border-primary/55 focus:bg-white focus:ring-4 focus:ring-primary/10"
                       >
                         <option value="male">Male</option>
                         <option value="female">Female</option>
@@ -354,7 +340,7 @@ export function RegisterPage() {
                         id="register-language"
                         value={language}
                         onChange={(e) => setLanguage(e.target.value)}
-                        className="w-full rounded-lg border border-gray-300 px-3.5 py-2 text-sm focus:border-primary focus:outline-none"
+                        className="h-13 w-full rounded-2xl border border-border bg-[#f9faff] px-4 text-sm font-medium outline-none transition focus:border-primary/55 focus:bg-white focus:ring-4 focus:ring-primary/10"
                       >
                         <option value="en">English</option>
                         <option value="ml">Malayalam (മലയാളം)</option>
@@ -378,10 +364,10 @@ export function RegisterPage() {
                     </p>
                     <div className="grid grid-cols-2 gap-3">
                       <label
-                        className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
+                        className={`flex cursor-pointer items-center gap-3 rounded-2xl border p-3 transition-all ${
                           adminRole === "hospital_admin"
-                            ? "border-primary bg-primary/5 text-primary-ink font-semibold"
-                            : "border-gray-200 text-gray-700 hover:border-gray-300"
+                            ? "border-primary/40 bg-primary-soft/55 font-semibold text-primary-ink"
+                            : "border-border bg-[#f9faff] text-text hover:border-primary/25"
                         }`}
                       >
                         <input
@@ -399,10 +385,10 @@ export function RegisterPage() {
                       </label>
 
                       <label
-                        className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
+                        className={`flex cursor-pointer items-center gap-3 rounded-2xl border p-3 transition-all ${
                           adminRole === "pharmacy_admin"
-                            ? "border-primary bg-primary/5 text-primary-ink font-semibold"
-                            : "border-gray-200 text-gray-700 hover:border-gray-300"
+                            ? "border-primary/40 bg-primary-soft/55 font-semibold text-primary-ink"
+                            : "border-border bg-[#f9faff] text-text hover:border-primary/25"
                         }`}
                       >
                         <input
@@ -440,7 +426,7 @@ export function RegisterPage() {
                         }
                         value={orgName}
                         onChange={(e) => setOrgName(e.target.value)}
-                        className="w-full rounded-lg border border-gray-300 px-3.5 py-2 text-sm focus:border-primary focus:outline-none"
+                        className="h-13 w-full rounded-2xl border border-border bg-[#f9faff] px-4 text-sm font-medium outline-none transition focus:border-primary/55 focus:bg-white focus:ring-4 focus:ring-primary/10"
                       />
                     </div>
 
@@ -458,7 +444,7 @@ export function RegisterPage() {
                         placeholder="e.g. HOSP-998812 / PHARM-3321"
                         value={licenseNumber}
                         onChange={(e) => setLicenseNumber(e.target.value)}
-                        className="w-full rounded-lg border border-gray-300 px-3.5 py-2 text-sm focus:border-primary focus:outline-none"
+                        className="h-13 w-full rounded-2xl border border-border bg-[#f9faff] px-4 text-sm font-medium outline-none transition focus:border-primary/55 focus:bg-white focus:ring-4 focus:ring-primary/10"
                       />
                     </div>
                   </div>
@@ -476,7 +462,7 @@ export function RegisterPage() {
                       placeholder="123 Health Avenue, MG Road"
                       value={address}
                       onChange={(e) => setAddress(e.target.value)}
-                      className="w-full rounded-lg border border-gray-300 px-3.5 py-2 text-sm focus:border-primary focus:outline-none"
+                      className="h-13 w-full rounded-2xl border border-border bg-[#f9faff] px-4 text-sm font-medium outline-none transition focus:border-primary/55 focus:bg-white focus:ring-4 focus:ring-primary/10"
                     />
                   </div>
 
@@ -494,7 +480,7 @@ export function RegisterPage() {
                         placeholder="Kochi"
                         value={city}
                         onChange={(e) => setCity(e.target.value)}
-                        className="w-full rounded-lg border border-gray-300 px-3.5 py-2 text-sm focus:border-primary focus:outline-none"
+                        className="h-13 w-full rounded-2xl border border-border bg-[#f9faff] px-4 text-sm font-medium outline-none transition focus:border-primary/55 focus:bg-white focus:ring-4 focus:ring-primary/10"
                       />
                     </div>
                     <div>
@@ -510,7 +496,7 @@ export function RegisterPage() {
                         placeholder="Kerala"
                         value={state}
                         onChange={(e) => setState(e.target.value)}
-                        className="w-full rounded-lg border border-gray-300 px-3.5 py-2 text-sm focus:border-primary focus:outline-none"
+                        className="h-13 w-full rounded-2xl border border-border bg-[#f9faff] px-4 text-sm font-medium outline-none transition focus:border-primary/55 focus:bg-white focus:ring-4 focus:ring-primary/10"
                       />
                     </div>
                     <div>
@@ -526,7 +512,7 @@ export function RegisterPage() {
                         placeholder="682001"
                         value={pincode}
                         onChange={(e) => setPincode(e.target.value)}
-                        className="w-full rounded-lg border border-gray-300 px-3.5 py-2 text-sm focus:border-primary focus:outline-none"
+                        className="h-13 w-full rounded-2xl border border-border bg-[#f9faff] px-4 text-sm font-medium outline-none transition focus:border-primary/55 focus:bg-white focus:ring-4 focus:ring-primary/10"
                       />
                     </div>
                   </div>
@@ -538,7 +524,7 @@ export function RegisterPage() {
               <button
                 type="submit"
                 disabled={registerMutation.isPending}
-                className="w-full rounded-xl bg-primary py-3 text-sm font-semibold text-white shadow hover:bg-primary-ink transition-colors disabled:opacity-50"
+                className="h-12 w-full rounded-2xl bg-primary py-3 text-sm font-bold text-white shadow-[0_10px_24px_-12px_rgba(37,99,235,.9)] transition hover:bg-[#1d55d8] disabled:opacity-50"
               >
                 {registerMutation.isPending ? "Creating Account..." : "Complete Registration"}
               </button>
